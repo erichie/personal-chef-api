@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String?  @unique
+  passwordHash String?
+  isGuest      Boolean  @default(true)
+  deviceId     String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  profile      UserProfile?
+  sessions     Session[]
+  recipes      Recipe[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model UserProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Store full JSON blobs for flexibility
+  chefIntake   Json?     // ChefIntake object from onboarding
+  inventory    Json?     // Array of InventoryItem objects
+  mealPlans    Json?     // Record<weekId, MealPlanJSON>
+  groceryList  Json?     // Array of GroceryItem objects
+  achievements Json?     // Record<achievementId, Achievement>
+  streaks      Json?     // { mealPlanStreak: StreakData, cookingStreak: StreakData }
+  tokenState   Json?     // TokenState object
+  
+  lastSyncedAt DateTime?
+  syncVersion  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Recipes stored as separate table for better querying
+// and future sharing features
+model Recipe {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Recipe details
+  title        String
+  description  String?
+  servings     Int?
+  totalMinutes Int?
+  tags         Json?    // Array of strings
+  ingredients  Json     // Array of IngredientJSON objects
+  steps        Json?    // Array of StepJSON objects
+  
+  // Metadata
+  source       String?  // "generated", "pasted", "meal-plan"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+// For future friends feature
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  status    String   // pending, accepted, blocked
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+}
+
