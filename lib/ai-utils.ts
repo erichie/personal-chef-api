@@ -104,48 +104,135 @@ Be helpful, creative, and make sure the replacement is genuinely appealing!`;
 
 // Type definitions for AI requests/responses
 export interface MealPlanRequest {
+  numRecipes?: number;
   preferences: {
-    chefIntake?: any;
     startDate: string;
     endDate: string;
-    mealsPerDay?: string[];
-    includeInventory?: boolean;
+    householdSize?: number;
+    dietStyle?: string;
+    allergies?: string[];
+    exclusions?: string[];
+    goals?: string[];
+    maxDinnerMinutes?: number;
+    cookingSkillLevel?: string;
+    cuisinePreferences?: Array<{
+      cuisine: string;
+      level: "LOVE" | "LIKE" | "NEUTRAL" | "DISLIKE" | "AVOID";
+    }>;
   };
-  inventory?: any[];
+  inventoryItems?: Array<{
+    name: string;
+    quantity?: number;
+    unit?: string;
+  }>;
+  preferencesExplanation?: string;
 }
 
 export interface ReplaceRecipeRequest {
   originalRecipe: {
     title: string;
-    ingredients?: any[];
+    ingredients?: Array<{
+      name: string;
+      qty?: number;
+      unit?: string;
+      notes?: string;
+      canonicalId?: string;
+    }>;
     totalMinutes?: number;
   };
   replacementReason: string;
-  preferences?: any;
+  preferences?: {
+    householdSize?: number;
+    dietStyle?: string;
+    allergies?: string[];
+    exclusions?: string[];
+    maxDinnerMinutes?: number;
+    cookingSkillLevel?: string;
+    cuisinePreferences?: Array<{
+      cuisine: string;
+      level: string;
+    }>;
+  };
 }
 
 // Helper to call OpenAI for meal plan generation
 export async function generateMealPlan(request: MealPlanRequest) {
   const client = getOpenAIClient();
 
-  const userPrompt = `Please create a meal plan with the following requirements:
+  // Format cuisine preferences for the prompt
+  const cuisinePrefs = request.preferences.cuisinePreferences || [];
+  const lovedCuisines = cuisinePrefs
+    .filter((c) => c.level === "LOVE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+  const likedCuisines = cuisinePrefs
+    .filter((c) => c.level === "LIKE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+  const avoidCuisines = cuisinePrefs
+    .filter((c) => c.level === "AVOID" || c.level === "DISLIKE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
 
-Start Date: ${request.preferences.startDate}
-End Date: ${request.preferences.endDate}
-Meals per day: ${
-    request.preferences.mealsPerDay?.join(", ") || "breakfast, lunch, dinner"
-  }
+  const userPrompt = `Please create ${
+    request.numRecipes || 7
+  } dinner recipes for a meal plan with the following requirements:
 
-User Preferences:
-${JSON.stringify(request.preferences.chefIntake, null, 2)}
+Date Range: ${request.preferences.startDate} to ${request.preferences.endDate}
+Household Size: ${request.preferences.householdSize || 4} people
+Diet Style: ${request.preferences.dietStyle || "omnivore"}
+Cooking Skill Level: ${request.preferences.cookingSkillLevel || "intermediate"}
+Maximum Cooking Time: ${request.preferences.maxDinnerMinutes || 45} minutes
 
 ${
-  request.inventory && request.inventory.length > 0
-    ? `Available Inventory:\n${JSON.stringify(request.inventory, null, 2)}`
+  request.preferences.goals && request.preferences.goals.length > 0
+    ? `Goals: ${request.preferences.goals.join(", ")}`
     : ""
 }
 
-Please return a complete meal plan in JSON format.`;
+${
+  request.preferences.allergies && request.preferences.allergies.length > 0
+    ? `ALLERGIES (MUST AVOID): ${request.preferences.allergies.join(", ")}`
+    : ""
+}
+
+${
+  request.preferences.exclusions && request.preferences.exclusions.length > 0
+    ? `Exclusions: ${request.preferences.exclusions.join(", ")}`
+    : ""
+}
+
+${
+  lovedCuisines.length > 0
+    ? `Preferred Cuisines (LOVE): ${lovedCuisines.join(", ")}`
+    : ""
+}
+${likedCuisines.length > 0 ? `Liked Cuisines: ${likedCuisines.join(", ")}` : ""}
+${
+  avoidCuisines.length > 0
+    ? `Cuisines to Avoid: ${avoidCuisines.join(", ")}`
+    : ""
+}
+
+${
+  request.inventoryItems && request.inventoryItems.length > 0
+    ? `Available Inventory (try to use these):\n${request.inventoryItems
+        .map(
+          (item) =>
+            `- ${item.name}${
+              item.quantity
+                ? ` (${item.quantity}${item.unit ? " " + item.unit : ""})`
+                : ""
+            }`
+        )
+        .join("\n")}`
+    : ""
+}
+
+${
+  request.preferencesExplanation
+    ? `\nSummary: ${request.preferencesExplanation}`
+    : ""
+}
+
+Please return a complete meal plan in JSON format with recipes that match these preferences.`;
 
   const response = await client.chat.completions.create({
     model: "gpt-4-turbo-preview",
@@ -155,7 +242,7 @@ Please return a complete meal plan in JSON format.`;
     ],
     response_format: { type: "json_object" },
     temperature: 0.8,
-    max_tokens: 8000, // Enough for detailed recipes with ingredients (no steps needed)
+    max_tokens: 4096, // Maximum for gpt-4-turbo-preview
   });
 
   const content = response.choices[0]?.message?.content;
@@ -166,7 +253,7 @@ Please return a complete meal plan in JSON format.`;
   // Validate JSON before parsing to provide better error messages
   try {
     return JSON.parse(content);
-  } catch (parseError) {
+  } catch {
     console.error("Failed to parse meal plan JSON:", content);
     throw errors.internal(
       `Failed to parse meal plan response. The AI returned malformed JSON. Please try again.`
@@ -177,6 +264,15 @@ Please return a complete meal plan in JSON format.`;
 // Helper to call OpenAI for recipe replacement
 export async function generateReplaceRecipe(request: ReplaceRecipeRequest) {
   const client = getOpenAIClient();
+
+  // Format cuisine preferences if available
+  const cuisinePrefs = request.preferences?.cuisinePreferences || [];
+  const lovedCuisines = cuisinePrefs
+    .filter((c) => c.level === "LOVE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+  const avoidCuisines = cuisinePrefs
+    .filter((c) => c.level === "AVOID" || c.level === "DISLIKE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
 
   const userPrompt = `Please suggest a replacement recipe for:
 
@@ -198,7 +294,49 @@ Reason for Replacement: ${request.replacementReason}
 
 ${
   request.preferences
-    ? `User Preferences:\n${JSON.stringify(request.preferences, null, 2)}`
+    ? `
+User Requirements:
+${
+  request.preferences.householdSize
+    ? `Household Size: ${request.preferences.householdSize} people`
+    : ""
+}
+${
+  request.preferences.dietStyle
+    ? `Diet Style: ${request.preferences.dietStyle}`
+    : ""
+}
+${
+  request.preferences.cookingSkillLevel
+    ? `Cooking Skill Level: ${request.preferences.cookingSkillLevel}`
+    : ""
+}
+${
+  request.preferences.maxDinnerMinutes
+    ? `Maximum Cooking Time: ${request.preferences.maxDinnerMinutes} minutes`
+    : ""
+}
+${
+  request.preferences.allergies && request.preferences.allergies.length > 0
+    ? `ALLERGIES (MUST AVOID): ${request.preferences.allergies.join(", ")}`
+    : ""
+}
+${
+  request.preferences.exclusions && request.preferences.exclusions.length > 0
+    ? `Exclusions: ${request.preferences.exclusions.join(", ")}`
+    : ""
+}
+${
+  lovedCuisines.length > 0
+    ? `Preferred Cuisines: ${lovedCuisines.join(", ")}`
+    : ""
+}
+${
+  avoidCuisines.length > 0
+    ? `Cuisines to Avoid: ${avoidCuisines.join(", ")}`
+    : ""
+}
+`
     : ""
 }
 
@@ -224,13 +362,13 @@ Please return a complete replacement recipe in JSON format.`;
 }
 
 // Parse and validate meal plan response
-export function parseMealPlanResponse(response: any) {
+export function parseMealPlanResponse(response: unknown) {
   // TODO: Add Zod schema validation for meal plan structure
   return response;
 }
 
 // Parse and validate recipe response
-export function parseRecipeResponse(response: any) {
+export function parseRecipeResponse(response: unknown) {
   // TODO: Add Zod schema validation for recipe structure
   return response;
 }

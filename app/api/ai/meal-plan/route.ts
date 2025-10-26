@@ -7,14 +7,36 @@ import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 
 const mealPlanRequestSchema = z.object({
+  numRecipes: z.number().optional(),
   preferences: z.object({
-    chefIntake: z.any().optional(),
     startDate: z.string(),
     endDate: z.string(),
-    mealsPerDay: z.array(z.string()).optional(),
-    includeInventory: z.boolean().optional(),
+    householdSize: z.number().optional(),
+    dietStyle: z.string().optional(),
+    allergies: z.array(z.string()).optional(),
+    exclusions: z.array(z.string()).optional(),
+    goals: z.array(z.string()).optional(),
+    maxDinnerMinutes: z.number().optional(),
+    cookingSkillLevel: z.string().optional(),
+    cuisinePreferences: z
+      .array(
+        z.object({
+          cuisine: z.string(),
+          level: z.enum(["LOVE", "LIKE", "NEUTRAL", "DISLIKE", "AVOID"]),
+        })
+      )
+      .optional(),
   }),
-  inventory: z.array(z.any()).optional(),
+  inventoryItems: z
+    .array(
+      z.object({
+        name: z.string(),
+        quantity: z.number().optional(),
+        unit: z.string().optional(),
+      })
+    )
+    .optional(),
+  preferencesExplanation: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
