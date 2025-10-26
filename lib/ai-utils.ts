@@ -32,7 +32,16 @@ When creating meal plans:
 4. Suggest recipes that align with their cuisine and flavor preferences
 5. Provide realistic portion sizes based on their household
 6. Consider their meal prep style and preferred cooking days
-7. Incorporate items from their inventory when possible
+7. Be aware of available inventory items, but DO NOT assume they are free or unlimited
+
+CRITICAL INVENTORY RULES:
+- ALWAYS include the COMPLETE list of ingredients for each recipe
+- Include ingredients even if they are in the user's inventory
+- When using inventory items, track quantities across all recipes
+- If an inventory item runs out, don't use it in subsequent recipes
+- Example: If user has 2 eggs and recipe 1 uses 2 eggs, don't use eggs in recipes 2-7
+- Prefer recipes that use inventory items, but respect quantity limits
+- Never create a recipe that requires more of an ingredient than is available in inventory
 
 Return meal plans in a structured JSON format with:
 - startDate and endDate
@@ -57,6 +66,7 @@ IMPORTANT:
 - canonicalId should be the ingredient name normalized: lowercase, spaces replaced with underscores
 - DO NOT include cooking steps/instructions - those will be fetched separately
 - Use proper measurements and be specific
+- List ALL ingredients needed, including those from inventory (for tracking purposes)
 
 Example ingredient format:
 {
@@ -213,17 +223,26 @@ ${
 
 ${
   request.inventoryItems && request.inventoryItems.length > 0
-    ? `Available Inventory (try to use these):\n${request.inventoryItems
-        .map(
-          (item) =>
-            `- ${item.name}${
-              item.quantity
-                ? ` (${item.quantity}${item.unit ? " " + item.unit : ""})`
-                : ""
-            }`
-        )
-        .join("\n")}`
-    : ""
+    ? `Available Inventory Items (USE WISELY - quantities are limited):
+${request.inventoryItems
+  .map(
+    (item) =>
+      `- ${item.name}: ${item.quantity || "some"}${
+        item.unit ? " " + item.unit : ""
+      } available`
+  )
+  .join("\n")}
+
+IMPORTANT INVENTORY INSTRUCTIONS:
+- Try to incorporate inventory items into recipes when appropriate
+- Track quantities carefully - if recipe 1 uses 2 eggs and you only have 6 eggs total, recipes 2-${
+        request.numRecipes || 7
+      } can use at most 4 eggs combined
+- Always list ALL ingredients for each recipe (including both inventory and non-inventory items)
+- If an inventory item runs out, don't use it in remaining recipes
+- Prioritize using inventory items that will spoil soon (fresh produce, meats, dairy)
+- Don't force inventory items into recipes where they don't fit naturally`
+    : `No inventory items available. Include all necessary ingredients for each recipe.`
 }
 
 ${
