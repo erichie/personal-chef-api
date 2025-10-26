@@ -257,8 +257,11 @@ export async function searchUsers(
 export async function findUserByFriendCode(
   friendCode: string
 ): Promise<UserBasic | null> {
+  // Normalize the input (remove dashes, spaces, convert to uppercase)
+  const normalizedCode = friendCode.replace(/[-\s]/g, "").toUpperCase();
+
   const user = await prisma.user.findUnique({
-    where: { friendCode },
+    where: { friendCode: normalizedCode },
     select: {
       id: true,
       displayName: true,

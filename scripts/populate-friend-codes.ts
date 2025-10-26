@@ -5,7 +5,10 @@
  */
 
 import { prisma } from "../lib/prisma";
-import { createId } from "@paralleldrive/cuid2";
+import {
+  generateFriendCode,
+  formatFriendCode,
+} from "../lib/friend-code-generator";
 
 async function populateFriendCodes() {
   console.log("🔑 Populating friend codes for existing users...\n");
@@ -25,14 +28,37 @@ async function populateFriendCodes() {
   console.log(`Found ${users.length} users without friend codes\n`);
 
   for (const user of users) {
-    const friendCode = createId();
+    // Generate a unique friend code (retry if collision)
+    let friendCode: string;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      friendCode = generateFriendCode();
+      const existing = await prisma.user.findUnique({
+        where: { friendCode },
+      });
+
+      if (!existing) {
+        break;
+      }
+      attempts++;
+    }
+
+    if (attempts === maxAttempts) {
+      console.error(
+        `❌ Failed to generate unique code for ${user.email || user.deviceId}`
+      );
+      continue;
+    }
+
     await prisma.user.update({
       where: { id: user.id },
-      data: { friendCode },
+      data: { friendCode: friendCode! },
     });
 
     const userLabel = user.email || user.deviceId;
-    console.log(`✓ User ${userLabel}: ${friendCode}`);
+    console.log(`✓ User ${userLabel}: ${formatFriendCode(friendCode!)}`);
   }
 
   console.log(`\n✅ Updated ${users.length} users with friend codes`);
