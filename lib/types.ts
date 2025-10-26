@@ -332,3 +332,78 @@ export interface UserBackup {
     updatedAt: string;
   }>;
 }
+
+// ==================== Social Feature Types ====================
+
+export interface UserBasic {
+  id: string;
+  displayName?: string;
+  email?: string;
+  avatarUrl?: string;
+  friendCode?: string;
+  bio?: string;
+}
+
+export interface Friendship {
+  id: string;
+  userId: string;
+  friendId: string;
+  status: "pending" | "accepted" | "declined" | "blocked";
+  createdAt: Date;
+  updatedAt: Date;
+  friend?: UserBasic;
+}
+
+export interface RecipePost {
+  id: string;
+  userId: string;
+  recipeId: string;
+  text?: string;
+  photoUrl?: string;
+  rating?: number; // 1-5
+  review?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+  recipe?: RecipeBasic;
+  likeCount?: number;
+  commentCount?: number;
+  isLikedByCurrentUser?: boolean;
+}
+
+export interface RecipeBasic {
+  id: string;
+  title: string;
+  description?: string;
+  servings?: number;
+  totalMinutes?: number;
+  tags?: string[];
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  text: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+}
+
+export interface FeedActivity {
+  id: string;
+  userId: string;
+  activityType: "post" | "meal_plan" | "recipe_saved" | "friend_added";
+  postId?: string;
+  recipeId?: string;
+  metadata?: {
+    friendId?: string;
+    friendName?: string;
+    recipeTitle?: string;
+    [key: string]: unknown;
+  };
+  createdAt: Date;
+  user: UserBasic;
+  post?: RecipePost;
+  recipe?: RecipeBasic;
+}

@@ -16,12 +16,23 @@ model User {
   passwordHash String?
   isGuest      Boolean  @default(true)
   deviceId     String   @unique
+  
+  // Social features
+  displayName  String?
+  friendCode   String?  @unique
+  bio          String?
+  avatarUrl    String?
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   
   profile      UserProfile?
   sessions     Session[]
   recipes      Recipe[]
+  posts        RecipePost[]
+  postLikes    PostLike[]
+  comments     PostComment[]
+  activities   FeedActivity[]
 }
 
 model Session {
@@ -75,20 +86,112 @@ model Recipe {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   
+  // Relations
+  posts        RecipePost[]
+  
   @@index([userId])
   @@index([userId, createdAt])
 }
 
-// For future friends feature
+// Friendship management
 model Friendship {
-  id        String   @id @default(uuid())
+  id        String            @id @default(uuid())
   userId    String
   friendId  String
-  status    String   // pending, accepted, blocked
-  createdAt DateTime @default(now())
+  status    FriendshipStatus  @default(pending)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
   
   @@unique([userId, friendId])
   @@index([userId])
   @@index([friendId])
+  @@index([status])
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  declined
+  blocked
+}
+
+// Recipe posts - status updates tied to recipes
+model RecipePost {
+  id        String   @id @default(uuid())
+  userId    String
+  recipeId  String
+  
+  // Post content
+  text      String?  // Optional caption/thoughts
+  photoUrl  String?  // Optional photo of the dish
+  rating    Int?     // 1-5 stars, optional
+  review    String?  // Optional detailed review
+  
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe    Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  likes     PostLike[]
+  comments  PostComment[]
+  
+  @@index([userId])
+  @@index([recipeId])
+  @@index([createdAt])
+}
+
+// Likes on posts
+model PostLike {
+  id        String     @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime   @default(now())
+  
+  post      RecipePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// Comments on posts
+model PostComment {
+  id        String     @id @default(uuid())
+  postId    String
+  userId    String
+  text      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  
+  post      RecipePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Feed activities - track all friend activities
+model FeedActivity {
+  id           String   @id @default(uuid())
+  userId       String
+  activityType String   // "post", "meal_plan", "recipe_saved", "friend_added"
+  
+  // Polymorphic references (only one will be set)
+  postId       String?
+  recipeId     String?
+  
+  // Activity metadata (stores friendId for friend_added activities)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([createdAt])
+  @@index([activityType])
 }
 
