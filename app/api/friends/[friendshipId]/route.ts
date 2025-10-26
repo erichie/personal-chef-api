@@ -5,11 +5,11 @@ import { removeFriend } from "@/lib/friend-utils";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { friendshipId: string } }
+  { params }: { params: Promise<{ friendshipId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { friendshipId } = params;
+    const { friendshipId } = await params;
 
     await removeFriend(friendshipId, user.id);
 

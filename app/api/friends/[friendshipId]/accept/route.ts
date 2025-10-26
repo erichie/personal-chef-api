@@ -7,11 +7,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { friendshipId: string } }
+  { params }: { params: Promise<{ friendshipId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { friendshipId } = params;
+    const { friendshipId } = await params;
 
     const friendship = await acceptFriendRequest(friendshipId, user.id);
 
@@ -25,7 +25,7 @@ export async function POST(
     await createFriendshipActivity(
       user.id,
       friendship.userId,
-      friend?.displayName || friend?.email
+      friend?.displayName || friend?.email || "Someone"
     );
 
     return NextResponse.json({ friendship });

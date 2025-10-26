@@ -157,7 +157,7 @@ export async function areFriends(
 export async function getFriendshipStatus(
   userId1: string,
   userId2: string
-): Promise<"none" | "pending" | "accepted" | "blocked"> {
+): Promise<"none" | "pending" | "accepted" | "blocked" | "declined"> {
   const friendship = await prisma.friendship.findFirst({
     where: {
       OR: [
@@ -183,9 +183,6 @@ export async function getFriendsList(
     where: {
       OR: [{ userId }, { friendId: userId }],
       ...where,
-    },
-    include: {
-      // We need to get the other user's details
     },
     orderBy: {
       createdAt: "desc",

@@ -10,11 +10,11 @@ const commentSchema = z.object({
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { postId } = params;
+    const { postId } = await params;
     const body = await request.json();
     const { text } = commentSchema.parse(body);
 

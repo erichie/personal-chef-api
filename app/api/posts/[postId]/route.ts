@@ -13,11 +13,11 @@ const updatePostSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { postId } = params;
+    const { postId } = await params;
 
     const post = await getPostWithDetails(postId, user.id);
 
@@ -29,11 +29,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { postId } = params;
+    const { postId } = await params;
     const body = await request.json();
 
     const data = updatePostSchema.parse(body);
@@ -47,11 +47,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { postId } = params;
+    const { postId } = await params;
 
     await deletePost(postId, user.id);
 

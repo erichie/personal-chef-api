@@ -5,11 +5,11 @@ import { deleteComment } from "@/lib/post-utils";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { postId: string; commentId: string } }
+  { params }: { params: Promise<{ postId: string; commentId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { commentId } = params;
+    const { commentId } = await params;
 
     await deleteComment(commentId, user.id);
 

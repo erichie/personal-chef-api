@@ -21,7 +21,7 @@ export async function createFeedActivity(data: {
       activityType: data.activityType,
       postId: data.postId,
       recipeId: data.recipeId,
-      metadata: data.metadata || {},
+      metadata: (data.metadata || {}) as any,
     },
   });
 }

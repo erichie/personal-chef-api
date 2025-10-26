@@ -5,11 +5,11 @@ import { toggleLike } from "@/lib/post-utils";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { user } = await requireAuth(request);
-    const { postId } = params;
+    const { postId } = await params;
 
     const result = await toggleLike(postId, user.id);
 
