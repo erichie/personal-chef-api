@@ -37,8 +37,35 @@ When creating meal plans:
 Return meal plans in a structured JSON format with:
 - startDate and endDate
 - days array with date and meals (breakfast, lunch, dinner)
-- Each meal should have: id, title, servings, totalMinutes, and basic recipe details
+- Each meal MUST include:
+  - id (unique identifier)
+  - title (recipe name)
+  - description (brief description)
+  - servings (number of servings)
+  - totalMinutes (total cooking time)
+  - tags (array of relevant tags)
+  - ingredients (array of objects with EXACT structure):
+    * name (string, the ingredient name as displayed)
+    * qty (number, optional - quantity if specified)
+    * unit (string, optional - measurement unit like "cup", "lb", "tsp")
+    * notes (string, optional - preparation notes like "grated", "chopped")
+    * canonicalId (string, REQUIRED - lowercase, underscore_separated version of ingredient name for matching, e.g., "black_pepper", "parmesan_cheese", "olive_oil")
 - Include a grocery list with items needed that aren't in inventory
+
+IMPORTANT: 
+- Every recipe must include complete ingredients list with canonicalId for each ingredient
+- canonicalId should be the ingredient name normalized: lowercase, spaces replaced with underscores
+- DO NOT include cooking steps/instructions - those will be fetched separately
+- Use proper measurements and be specific
+
+Example ingredient format:
+{
+  "name": "parmesan cheese",
+  "qty": 1,
+  "unit": "cup",
+  "notes": "grated",
+  "canonicalId": "parmesan_cheese"
+}
 
 Be creative, practical, and enthusiastic about helping them achieve their cooking goals!`;
 
@@ -56,9 +83,22 @@ When replacing recipes:
 
 Return the replacement recipe in JSON format with:
 - title, description, servings, totalMinutes
-- ingredients array with name, quantity, unit, notes
-- steps array with order and text
+- ingredients array with EXACT structure:
+  * name (string, the ingredient name as displayed)
+  * qty (number, optional - quantity if specified)
+  * unit (string, optional - measurement unit like "cup", "lb", "tsp")
+  * notes (string, optional - preparation notes like "grated", "chopped")
+  * canonicalId (string, REQUIRED - lowercase, underscore_separated version of ingredient name for matching)
+- steps array with order (number) and text (string)
 - tags for categorization
+
+Example ingredient:
+{
+  "name": "olive oil",
+  "qty": 2,
+  "unit": "tbsp",
+  "canonicalId": "olive_oil"
+}
 
 Be helpful, creative, and make sure the replacement is genuinely appealing!`;
 
@@ -115,7 +155,7 @@ Please return a complete meal plan in JSON format.`;
     ],
     response_format: { type: "json_object" },
     temperature: 0.8,
-    max_tokens: 4000,
+    max_tokens: 8000, // Enough for detailed recipes with ingredients (no steps needed)
   });
 
   const content = response.choices[0]?.message?.content;
@@ -123,7 +163,15 @@ Please return a complete meal plan in JSON format.`;
     throw errors.internal("Failed to generate meal plan");
   }
 
-  return JSON.parse(content);
+  // Validate JSON before parsing to provide better error messages
+  try {
+    return JSON.parse(content);
+  } catch (parseError) {
+    console.error("Failed to parse meal plan JSON:", content);
+    throw errors.internal(
+      `Failed to parse meal plan response. The AI returned malformed JSON. Please try again.`
+    );
+  }
 }
 
 // Helper to call OpenAI for recipe replacement
@@ -205,8 +253,21 @@ Return the parsed recipe in JSON format with:
 - servings (number, if available)
 - totalMinutes (number, total time in minutes if available)
 - tags (array of strings for categorization)
-- ingredients (array of objects with: name, qty, unit, notes)
-- steps (array of objects with: order, text)
+- ingredients (array of objects with EXACT structure):
+  * name (string, the ingredient name as displayed)
+  * qty (number, optional - quantity if specified)
+  * unit (string, optional - measurement unit)
+  * notes (string, optional - preparation notes)
+  * canonicalId (string, REQUIRED - lowercase, underscore_separated version of ingredient name)
+- steps (array of objects with: order (number), text (string))
+
+Example ingredient:
+{
+  "name": "all-purpose flour",
+  "qty": 2,
+  "unit": "cups",
+  "canonicalId": "all_purpose_flour"
+}
 
 If information is not clearly stated, use your best judgment or omit the field. Focus on accuracy over completeness.`;
 
