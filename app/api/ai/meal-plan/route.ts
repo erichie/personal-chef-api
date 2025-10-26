@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
 
     // Extract recipes from meal plan and store them
     const recipes = [];
+    const recipeIdMap = new Map<string, string>(); // Map meal title to recipe ID
+
     if (mealPlanData.days && Array.isArray(mealPlanData.days)) {
       for (const day of mealPlanData.days) {
         if (day.meals) {
@@ -69,8 +71,9 @@ export async function POST(request: NextRequest) {
                 },
               });
 
+              let recipeId: string;
               if (!existingRecipe) {
-                const recipeId = uuidv4();
+                recipeId = uuidv4();
                 const recipe = await prisma.recipe.create({
                   data: {
                     id: recipeId,
@@ -87,8 +90,13 @@ export async function POST(request: NextRequest) {
                 });
                 recipes.push(recipe);
               } else {
+                recipeId = existingRecipe.id;
                 recipes.push(existingRecipe);
               }
+
+              // Store the mapping and inject recipeId into the meal
+              recipeIdMap.set(meal.title, recipeId);
+              meal.recipeId = recipeId;
             }
           }
         }
@@ -98,6 +106,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       mealPlan: mealPlanData,
       recipesCreated: recipes.length,
+      recipes: recipes.map((r) => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        servings: r.servings,
+        totalMinutes: r.totalMinutes,
+      })),
       message: "Meal plan generated successfully",
     });
   } catch (error) {
