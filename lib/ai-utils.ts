@@ -182,7 +182,7 @@ export async function generateMealPlan(request: MealPlanRequest) {
     .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
 
   const userPrompt = `Please create ${
-    request.numRecipes || 7
+    request.numRecipes || 10
   } dinner recipes for a meal plan with the following requirements:
 
 Date Range: ${request.preferences.startDate} to ${request.preferences.endDate}
@@ -236,7 +236,7 @@ ${request.inventoryItems
 IMPORTANT INVENTORY INSTRUCTIONS:
 - Try to incorporate inventory items into recipes when appropriate
 - Track quantities carefully - if recipe 1 uses 2 eggs and you only have 6 eggs total, recipes 2-${
-        request.numRecipes || 7
+        request.numRecipes || 10
       } can use at most 4 eggs combined
 - Always list ALL ingredients for each recipe (including both inventory and non-inventory items)
 - If an inventory item runs out, don't use it in remaining recipes
