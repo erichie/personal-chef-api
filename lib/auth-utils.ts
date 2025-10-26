@@ -110,9 +110,27 @@ export async function createGuestUser(deviceId: string) {
 }
 
 /**
- * Create session for user
+ * Create session for user (or return existing valid session)
  */
 export async function createSessionForUser(userId: string) {
+  // Check if user already has a valid session
+  const existingSession = await prisma.session.findFirst({
+    where: {
+      userId,
+      expiresAt: {
+        gt: new Date(), // Only consider sessions that haven't expired
+      },
+    },
+    orderBy: {
+      expiresAt: "desc", // Get the most recent one
+    },
+  });
+
+  if (existingSession) {
+    return existingSession;
+  }
+
+  // Create new session if none exists or all are expired
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   const token = uuidv4();
 
@@ -248,4 +266,18 @@ export async function requireAuth(request: NextRequest) {
   }
 
   throw errors.unauthorized("Authentication required");
+}
+
+/**
+ * Clean up expired sessions from the database
+ */
+export async function cleanupExpiredSessions() {
+  const result = await prisma.session.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  });
+  return result.count;
 }
