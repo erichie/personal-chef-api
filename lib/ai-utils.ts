@@ -33,6 +33,9 @@ When creating meal plans:
 5. Provide realistic portion sizes based on their household
 6. Consider their meal prep style and preferred cooking days
 7. Be aware of available inventory items, but DO NOT assume they are free or unlimited
+8. When appropriate, include complementary side dishes with entrees (e.g., rice with curry, roasted vegetables with protein, salad with pasta)
+9. Side dishes should be simple, quick to prepare, and enhance the main dish
+10. Only include sides when they naturally complement the meal and fit within time/skill constraints
 
 CRITICAL INVENTORY RULES:
 - ALWAYS include the COMPLETE list of ingredients for each recipe
@@ -48,16 +51,16 @@ Return meal plans in a structured JSON format with:
 - days array with date and meals (breakfast, lunch, dinner)
 - Each meal MUST include:
   - id (unique identifier)
-  - title (recipe name)
-  - description (brief description)
+  - title (recipe name - include sides in title if applicable, e.g., "Grilled Chicken with Roasted Vegetables")
+  - description (brief description mentioning both main and sides)
   - servings (number of servings)
-  - totalMinutes (total cooking time)
+  - totalMinutes (total cooking time including sides)
   - tags (array of relevant tags)
-  - ingredients (array of objects with EXACT structure):
+  - ingredients (array of objects with EXACT structure - include ALL ingredients for main dish AND sides):
     * name (string, the ingredient name as displayed)
     * qty (number, optional - quantity if specified)
     * unit (string, optional - measurement unit like "cup", "lb", "tsp")
-    * notes (string, optional - preparation notes like "grated", "chopped")
+    * notes (string, optional - preparation notes like "grated", "chopped", or "for side dish")
     * canonicalId (string, REQUIRED - lowercase, underscore_separated version of ingredient name for matching, e.g., "black_pepper", "parmesan_cheese", "olive_oil")
 - Include a grocery list with items needed that aren't in inventory
 

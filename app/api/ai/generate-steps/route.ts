@@ -179,19 +179,27 @@ Please generate clear, step-by-step cooking instructions.`;
       );
     }
 
-    // If recipeId was provided, optionally update the recipe with the new steps
-    if (payload.recipeId) {
+    console.log(`✅ Generated ${result.steps.length} cooking steps`);
+
+    // If recipeId was provided, automatically save the steps to the database
+    let recipeId = payload.recipeId;
+    if (recipeId) {
       await prisma.recipe.update({
-        where: { id: payload.recipeId },
+        where: { id: recipeId },
         data: {
           steps: result.steps as any,
         },
       });
+      console.log(`💾 Saved steps to recipe ${recipeId} in database`);
     }
 
     return NextResponse.json({
       steps: result.steps,
-      message: "Cooking steps generated successfully",
+      recipeId: recipeId || null,
+      saved: !!recipeId,
+      message: recipeId
+        ? "Cooking steps generated and saved to recipe"
+        : "Cooking steps generated successfully",
     });
   } catch (error) {
     return handleApiError(error);

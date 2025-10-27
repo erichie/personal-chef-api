@@ -132,16 +132,7 @@ export async function getFriendsFeed(
                 bio: true,
               },
             },
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                description: true,
-                servings: true,
-                totalMinutes: true,
-                tags: true,
-              },
-            },
+            recipe: true, // Include ALL recipe data (ingredients, steps, etc.)
             likes: {
               select: {
                 userId: true,
@@ -166,14 +157,6 @@ export async function getFriendsFeed(
       if (activity.recipeId) {
         recipe = await prisma.recipe.findUnique({
           where: { id: activity.recipeId },
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            servings: true,
-            totalMinutes: true,
-            tags: true,
-          },
         });
       }
 
@@ -281,16 +264,7 @@ export async function getUserActivity(
                 bio: true,
               },
             },
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                description: true,
-                servings: true,
-                totalMinutes: true,
-                tags: true,
-              },
-            },
+            recipe: true, // Include ALL recipe data (ingredients, steps, etc.)
             likes: {
               select: {
                 userId: true,
@@ -314,14 +288,6 @@ export async function getUserActivity(
       if (activity.recipeId) {
         recipe = await prisma.recipe.findUnique({
           where: { id: activity.recipeId },
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            servings: true,
-            totalMinutes: true,
-            tags: true,
-          },
         });
       }
 

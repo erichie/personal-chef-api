@@ -55,16 +55,7 @@ export async function createPost(data: {
           bio: true,
         },
       },
-      recipe: {
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          servings: true,
-          totalMinutes: true,
-          tags: true,
-        },
-      },
+      recipe: true, // Include ALL recipe data (ingredients, steps, etc.)
     },
   });
 
@@ -125,16 +116,7 @@ export async function updatePost(
           bio: true,
         },
       },
-      recipe: {
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          servings: true,
-          totalMinutes: true,
-          tags: true,
-        },
-      },
+      recipe: true, // Include ALL recipe data (ingredients, steps, etc.)
     },
   });
 
@@ -309,16 +291,7 @@ export async function getPostWithDetails(
           bio: true,
         },
       },
-      recipe: {
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          servings: true,
-          totalMinutes: true,
-          tags: true,
-        },
-      },
+      recipe: true, // Include ALL recipe data (ingredients, steps, etc.)
       likes: {
         select: {
           userId: true,
