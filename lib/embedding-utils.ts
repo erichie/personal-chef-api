@@ -96,46 +96,49 @@ export async function generatePreferencesEmbedding(preferences: {
 }): Promise<number[]> {
   const parts: string[] = [];
 
-  // Add preferences explanation if available (most descriptive)
-  if (preferences.preferencesExplanation) {
-    parts.push(preferences.preferencesExplanation);
-  }
+  // Prioritize concrete, recipe-matchable attributes over abstract goals
 
-  // Add diet style
-  if (preferences.dietStyle) {
-    parts.push(`${preferences.dietStyle} diet`);
-  }
-
-  // Add goals
-  if (preferences.goals && preferences.goals.length > 0) {
-    parts.push(`Goals: ${preferences.goals.join(", ")}`);
-  }
-
-  // Add loved cuisines (weighted more heavily)
+  // Add loved cuisines FIRST and MULTIPLE times for higher weight
   if (preferences.cuisinePreferences) {
     const lovedCuisines = preferences.cuisinePreferences
       .filter((c) => c.level === "LOVE")
       .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+
     if (lovedCuisines.length > 0) {
-      parts.push(`Loves ${lovedCuisines.join(", ")} cuisine`);
+      // Add each cuisine individually for better matching
+      lovedCuisines.forEach((cuisine) => {
+        parts.push(`${cuisine} recipe`);
+        parts.push(`${cuisine} dish`);
+      });
     }
 
     const likedCuisines = preferences.cuisinePreferences
       .filter((c) => c.level === "LIKE")
       .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
     if (likedCuisines.length > 0) {
-      parts.push(`Likes ${likedCuisines.join(", ")} cuisine`);
+      likedCuisines.forEach((cuisine) => {
+        parts.push(`${cuisine} meal`);
+      });
     }
   }
 
-  // Add skill level
-  if (preferences.cookingSkillLevel) {
-    parts.push(`${preferences.cookingSkillLevel} cook`);
+  // Add preferences explanation if available
+  if (preferences.preferencesExplanation) {
+    parts.push(preferences.preferencesExplanation);
   }
 
-  // Add time constraints
-  if (preferences.maxDinnerMinutes) {
-    parts.push(`prefers quick ${preferences.maxDinnerMinutes} minute meals`);
+  // Add diet style in recipe context (skip omnivore as it's default)
+  if (preferences.dietStyle && preferences.dietStyle !== "omnivore") {
+    parts.push(`${preferences.dietStyle} recipe`);
+  }
+
+  // Skip abstract goals - they don't match recipe text well
+  // Goals like "USE_WHAT_I_HAVE, TRY_NEW_RECIPES" don't appear in recipe descriptions
+
+  // Add time preferences in recipe-like language
+  if (preferences.maxDinnerMinutes && preferences.maxDinnerMinutes <= 45) {
+    parts.push("quick dinner recipe");
+    parts.push("easy meal");
   }
 
   // Note: We intentionally don't include allergies/exclusions in the embedding
@@ -143,10 +146,14 @@ export async function generatePreferencesEmbedding(preferences: {
 
   if (parts.length === 0) {
     // Fallback for empty preferences
-    return generateEmbedding("general recipes dinner meals");
+    console.log(
+      "⚠️  No preferences provided, using fallback: 'dinner recipe meal'"
+    );
+    return generateEmbedding("dinner recipe meal");
   }
 
   const preferencesText = parts.join(". ");
+  console.log("🔍 Preference embedding text:", preferencesText);
   return generateEmbedding(preferencesText);
 }
 

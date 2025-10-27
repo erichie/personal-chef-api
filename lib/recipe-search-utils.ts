@@ -7,7 +7,7 @@ import {
 } from "./embedding-utils";
 import { Prisma } from "@prisma/client";
 
-interface RecipeWithSimilarity {
+export interface RecipeWithSimilarity {
   id: string;
   userId: string;
   title: string;
@@ -388,6 +388,264 @@ function calculateIngredientOverlap(
  */
 export async function getTotalRecipeCount(): Promise<number> {
   return prisma.recipe.count();
+}
+
+/**
+ * Calculate how similar two recipe titles are (0-1, where 1 is identical)
+ */
+function calculateTitleSimilarity(title1: string, title2: string): number {
+  const normalize = (str: string) =>
+    str
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2); // Remove short words like "and", "the"
+
+  const words1 = normalize(title1);
+  const words2 = normalize(title2);
+
+  if (words1.length === 0 || words2.length === 0) return 0;
+
+  // Count matching words
+  const matches = words1.filter((w) => words2.includes(w)).length;
+  const maxLength = Math.max(words1.length, words2.length);
+
+  return matches / maxLength;
+}
+
+/**
+ * Calculate ingredient overlap between two recipes (0-1, where 1 is all ingredients match)
+ */
+function calculateIngredientOverlapPercent(
+  ingredients1: Array<{ name: string; canonicalId?: string }>,
+  ingredients2: Array<{ name: string; canonicalId?: string }>
+): number {
+  if (ingredients1.length === 0 || ingredients2.length === 0) return 0;
+
+  // Use canonical IDs if available, otherwise normalize names
+  const getKey = (ing: { name: string; canonicalId?: string }) =>
+    ing.canonicalId || ing.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const set1 = new Set(ingredients1.map(getKey));
+  const set2 = new Set(ingredients2.map(getKey));
+
+  const intersection = [...set1].filter((x) => set2.has(x)).length;
+  const maxLength = Math.max(set1.size, set2.size);
+
+  return intersection / maxLength;
+}
+
+/**
+ * Select diverse recipes from candidates
+ * Avoids selecting recipes that are too similar to each other
+ */
+export function selectDiverseRecipes(
+  candidates: RecipeWithSimilarity[],
+  count: number,
+  options: {
+    titleSimilarityThreshold?: number;
+    ingredientOverlapThreshold?: number;
+  } = {}
+): RecipeWithSimilarity[] {
+  const {
+    titleSimilarityThreshold = 0.6, // 60% word overlap
+    ingredientOverlapThreshold = 0.7, // 70% ingredient overlap
+  } = options;
+
+  if (candidates.length === 0) return [];
+  if (candidates.length <= count) return candidates;
+
+  const selected: RecipeWithSimilarity[] = [];
+  const candidatesCopy = [...candidates].sort(
+    (a, b) => b.similarity - a.similarity
+  );
+
+  for (const candidate of candidatesCopy) {
+    if (selected.length >= count) break;
+
+    // Check if this recipe is too similar to any already-selected recipe
+    let isTooSimilar = false;
+
+    for (const selectedRecipe of selected) {
+      // Check title similarity
+      const titleSim = calculateTitleSimilarity(
+        candidate.title,
+        selectedRecipe.title
+      );
+
+      if (titleSim >= titleSimilarityThreshold) {
+        console.log(
+          `  ⊘ Skipping "${candidate.title}" - too similar to "${
+            selectedRecipe.title
+          }" (${(titleSim * 100).toFixed(0)}% title match)`
+        );
+        isTooSimilar = true;
+        break;
+      }
+
+      // Check ingredient overlap
+      const candidateIngredients = candidate.ingredients as Array<{
+        name: string;
+        canonicalId?: string;
+      }>;
+      const selectedIngredients = selectedRecipe.ingredients as Array<{
+        name: string;
+        canonicalId?: string;
+      }>;
+
+      if (candidateIngredients && selectedIngredients) {
+        const overlap = calculateIngredientOverlapPercent(
+          candidateIngredients,
+          selectedIngredients
+        );
+
+        if (overlap >= ingredientOverlapThreshold) {
+          console.log(
+            `  ⊘ Skipping "${candidate.title}" - too similar to "${
+              selectedRecipe.title
+            }" (${(overlap * 100).toFixed(0)}% ingredient overlap)`
+          );
+          isTooSimilar = true;
+          break;
+        }
+      }
+    }
+
+    if (!isTooSimilar) {
+      selected.push(candidate);
+    }
+  }
+
+  // If we couldn't get enough diverse recipes, fill with remaining candidates
+  if (selected.length < count) {
+    console.log(
+      `  ℹ️  Only found ${selected.length} diverse recipes, adding ${
+        count - selected.length
+      } more...`
+    );
+    for (const candidate of candidatesCopy) {
+      if (selected.length >= count) break;
+      if (!selected.find((s) => s.id === candidate.id)) {
+        selected.push(candidate);
+      }
+    }
+  }
+
+  return selected;
+}
+
+/**
+ * Search recipes by tags and cuisine preferences
+ * Fallback when embedding search fails
+ */
+export async function searchRecipesByTags(
+  cuisinePreferences: Array<{ cuisine: string; level: string }>,
+  options: {
+    limit?: number;
+    excludeRecipeIds?: string[];
+  } = {}
+): Promise<RecipeWithSimilarity[]> {
+  const { limit = 50, excludeRecipeIds = [] } = options;
+
+  // Get loved and liked cuisines
+  const lovedCuisines = cuisinePreferences
+    .filter((c) => c.level === "LOVE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+
+  const likedCuisines = cuisinePreferences
+    .filter((c) => c.level === "LIKE")
+    .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
+
+  const allCuisines = [...lovedCuisines, ...likedCuisines];
+
+  if (allCuisines.length === 0) {
+    return [];
+  }
+
+  // Build tag search condition
+  const tagConditions = allCuisines
+    .map((cuisine) => `tags::text ILIKE '%${cuisine}%'`)
+    .join(" OR ");
+
+  const excludeCondition =
+    excludeRecipeIds.length > 0
+      ? `AND id NOT IN (${excludeRecipeIds.map((id) => `'${id}'`).join(",")})`
+      : "";
+
+  const query = `
+    SELECT 
+      id,
+      "userId",
+      title,
+      description,
+      servings,
+      "totalMinutes",
+      tags,
+      ingredients,
+      steps,
+      source,
+      "createdAt",
+      "updatedAt",
+      0.8 as similarity
+    FROM "Recipe"
+    WHERE (${tagConditions})
+    ${excludeCondition}
+    ORDER BY "createdAt" DESC
+    LIMIT $1
+  `;
+
+  const recipes = await prisma.$queryRawUnsafe<RecipeWithSimilarity[]>(
+    query,
+    limit
+  );
+
+  return recipes;
+}
+
+/**
+ * Get random recipes from the database
+ * Last resort when no other search methods work
+ */
+export async function getRandomRecipes(
+  count: number,
+  options: {
+    excludeRecipeIds?: string[];
+  } = {}
+): Promise<RecipeWithSimilarity[]> {
+  const { excludeRecipeIds = [] } = options;
+
+  const excludeCondition =
+    excludeRecipeIds.length > 0
+      ? `WHERE id NOT IN (${excludeRecipeIds.map((id) => `'${id}'`).join(",")})`
+      : "";
+
+  const query = `
+    SELECT 
+      id,
+      "userId",
+      title,
+      description,
+      servings,
+      "totalMinutes",
+      tags,
+      ingredients,
+      steps,
+      source,
+      "createdAt",
+      "updatedAt",
+      0.5 as similarity
+    FROM "Recipe"
+    ${excludeCondition}
+    ORDER BY RANDOM()
+    LIMIT $1
+  `;
+
+  const recipes = await prisma.$queryRawUnsafe<RecipeWithSimilarity[]>(
+    query,
+    count
+  );
+
+  return recipes;
 }
 
 /**

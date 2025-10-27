@@ -184,9 +184,13 @@ export async function generateMealPlan(request: MealPlanRequest) {
     .filter((c) => c.level === "AVOID" || c.level === "DISLIKE")
     .map((c) => c.cuisine.toLowerCase().replace(/_/g, " "));
 
-  const userPrompt = `Please create ${
+  const userPrompt = `Please create EXACTLY ${
     request.numRecipes || 10
   } dinner recipes for a meal plan with the following requirements:
+
+CRITICAL: Generate exactly ${
+    request.numRecipes || 10
+  } recipes, one per day. Create as many days as needed to reach this count.
 
 Date Range: ${request.preferences.startDate} to ${request.preferences.endDate}
 Household Size: ${request.preferences.householdSize || 4} people
@@ -264,7 +268,7 @@ Please return a complete meal plan in JSON format with recipes that match these 
     ],
     response_format: { type: "json_object" },
     temperature: 0.8,
-    max_tokens: 4096, // Maximum for gpt-4-turbo-preview
+    max_tokens: 4096, // Increased to handle 10+ recipes with full details
   });
 
   const content = response.choices[0]?.message?.content;
@@ -401,15 +405,17 @@ export function parseRecipeResponse(response: unknown) {
 
 import {
   searchRecipesByPreferences,
-  getRecentlyUsedRecipes,
-  // isDuplicateRecipe, // Temporarily disabled for testing
+  getRecentlyUsedRecipes, // Currently unused (exclusion disabled for dev)
   getTotalRecipeCount,
   searchRecipeByQuery,
+  searchRecipesByTags,
+  getRandomRecipes,
+  selectDiverseRecipes,
+  type RecipeWithSimilarity,
 } from "./recipe-search-utils";
-// import { generateRecipeEmbedding } from "./embedding-utils"; // Temporarily disabled for testing
 
 interface HybridMealPlanResult {
-  mealPlan: any;
+  mealPlan: MealPlanStructure;
   recipesFromDatabase: number;
   recipesGenerated: number;
   costSavingsEstimate: string;
@@ -429,68 +435,143 @@ export async function generateHybridMealPlan(
   const numRecipes = request.numRecipes || 10;
 
   // PHASE 1: Database Recipe Search
+  // Strategy: Always aim for 50/50 split (half DB, half AI)
   const totalRecipes = await getTotalRecipeCount();
 
-  let dbRecipes: any[] = [];
-  let targetDbRecipes = 0;
+  // Target half from database, half from AI
+  const targetDbRecipes = Math.min(Math.floor(numRecipes / 2), totalRecipes);
+  const targetAIRecipes = numRecipes - targetDbRecipes;
 
-  // Edge case: Not enough recipes in database
-  if (totalRecipes < 20) {
-    console.log(`Only ${totalRecipes} recipes in database, skipping DB search`);
+  console.log(
+    `Target: ${targetDbRecipes} from DB, ${targetAIRecipes} from AI (total: ${numRecipes})`
+  );
+
+  let dbRecipes: RecipeWithSimilarity[] = [];
+
+  if (targetDbRecipes === 0) {
+    console.log("No recipes in database, will generate all with AI");
   } else {
-    // Get recently used recipes to exclude
-    const recentlyUsed = await getRecentlyUsedRecipes(userId, 14);
+    // RECIPE EXCLUSION DISABLED FOR DEVELOPMENT
+    // Uncomment this when your database is more populated (100+ recipes)
+    // to avoid repeating recently used recipes
 
-    // Search for matching recipes (target 60-70% from DB)
-    targetDbRecipes = Math.floor(numRecipes * 0.65);
+    // // Smart exclusion strategy: don't exclude more than 50% of database
+    // let recentlyUsed = await getRecentlyUsedRecipes(userId, 14);
+    //
+    // // If we're excluding too many recipes, reduce the exclusion period
+    // if (recentlyUsed.length > totalRecipes * 0.5) {
+    //   console.log(
+    //     `⚠️  Recently used (${recentlyUsed.length}) exceeds 50% of database (${totalRecipes}), trying shorter period...`
+    //   );
+    //   recentlyUsed = await getRecentlyUsedRecipes(userId, 7);
+    //
+    //   // If still too many, try last 3 days
+    //   if (recentlyUsed.length > totalRecipes * 0.5) {
+    //     console.log(
+    //       `⚠️  Still too many (${recentlyUsed.length}), trying last 3 days...`
+    //     );
+    //     recentlyUsed = await getRecentlyUsedRecipes(userId, 3);
+    //
+    //     // If STILL too many, only exclude very recent (last day)
+    //     if (recentlyUsed.length > totalRecipes * 0.5) {
+    //       console.log(
+    //         `⚠️  Still too many (${recentlyUsed.length}), using last 1 day only...`
+    //       );
+    //       recentlyUsed = await getRecentlyUsedRecipes(userId, 1);
+    //     }
+    //   }
+    // }
+    //
+    // console.log(
+    //   `Excluding ${recentlyUsed.length} recently used recipes (from last ${
+    //     recentlyUsed.length > totalRecipes * 0.5 ? "1 day" : "14 days"
+    //   })`
+    // );
+
+    const recentlyUsed: string[] = []; // Empty for now
+    console.log("📝 Recipe exclusion disabled (dev mode)");
+
     const searchLimit = targetDbRecipes * 3; // Search more to have options
 
-    const candidates = await searchRecipesByPreferences(request.preferences, {
+    // STEP 1: Try semantic/embedding search first
+    console.log("\n🔍 Step 1: Trying semantic search with embeddings...");
+    console.log(`  - Search limit: ${searchLimit}`);
+    console.log(`  - Min similarity: 0.3`);
+    console.log(
+      `  - Allergies: ${request.preferences.allergies?.join(", ") || "none"}`
+    );
+    console.log(
+      `  - Exclusions: ${request.preferences.exclusions?.join(", ") || "none"}`
+    );
+    console.log(
+      `  - Max minutes: ${request.preferences.maxDinnerMinutes || "none"}`
+    );
+
+    let candidates = await searchRecipesByPreferences(request.preferences, {
       limit: searchLimit,
-      userId,
       excludeRecipeIds: recentlyUsed,
-      minSimilarity: 0.5,
+      minSimilarity: 0.3,
+    });
+
+    console.log(`Found ${candidates.length} recipes via semantic search`);
+
+    // STEP 2: If no results, fallback to tag-based search
+    if (candidates.length === 0 && request.preferences.cuisinePreferences) {
+      console.log(
+        "\n🏷️  Step 2: Semantic search failed, trying tag-based search..."
+      );
+      candidates = await searchRecipesByTags(
+        request.preferences.cuisinePreferences,
+        {
+          limit: searchLimit,
+          excludeRecipeIds: recentlyUsed,
+        }
+      );
+      console.log(`Found ${candidates.length} recipes via tag search`);
+    }
+
+    // STEP 3: If still no results, get random recipes
+    if (candidates.length === 0) {
+      console.log(
+        "\n🎲 Step 3: Tag search failed, selecting random recipes..."
+      );
+      candidates = await getRandomRecipes(searchLimit, {
+        excludeRecipeIds: recentlyUsed,
+      });
+      console.log(`Found ${candidates.length} random recipes`);
+    }
+
+    // Debug: Show top matches
+    if (candidates.length > 0) {
+      console.log("\n✅ Top matches:");
+      candidates.slice(0, 5).forEach((c, i) => {
+        const tags = c.tags as string[] | null;
+        console.log(
+          `  ${i + 1}. ${c.title} (similarity: ${c.similarity.toFixed(
+            3
+          )}, tags: ${tags?.join(", ") || "none"})`
+        );
+      });
+    }
+
+    // Select diverse recipes (avoid duplicates/very similar recipes)
+    console.log("\n🎨 Applying diversity filter...");
+    dbRecipes = selectDiverseRecipes(candidates, targetDbRecipes, {
+      titleSimilarityThreshold: 0.6, // 60% word overlap
+      ingredientOverlapThreshold: 0.7, // 70% ingredient overlap
     });
 
     console.log(
-      `Found ${candidates.length} candidate recipes from database (similarity >= 0.5)`
+      `\n✓ Selected ${dbRecipes.length} diverse recipes from database\n`
     );
-
-    // Edge case: Not enough good matches
-    if (candidates.length < 3) {
-      console.log("Too few matches, will rely more on AI generation");
-      targetDbRecipes = candidates.length;
-    }
-
-    // PHASE 2: Quality Check (simplified - just use top matches)
-    // In a more sophisticated version, we could use AI to rate these
-    // For now, we trust the similarity scores
-    dbRecipes = candidates
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, targetDbRecipes);
-
-    console.log(`Selected ${dbRecipes.length} recipes from database`);
   }
 
-  // PHASE 3: Fill Gaps with AI Generation
+  // PHASE 2: Generate remaining recipes with AI
   const remainingNeeded = numRecipes - dbRecipes.length;
-  let aiGeneratedRecipes: any[] = [];
+  const aiGeneratedRecipes: RecipeWithSimilarity[] = [];
 
   if (remainingNeeded > 0) {
-    console.log(`Generating ${remainingNeeded} recipes with AI`);
-
-    // Build exclusion list for AI prompt
-    const existingTitles = dbRecipes.map((r) => r.title);
-    const existingIngredientSets = dbRecipes.map((r) => {
-      const ingredients = r.ingredients as Array<{ name: string }>;
-      return ingredients.map((ing) => ing.name).join(", ");
-    });
-
-    const exclusionPrompt =
-      existingTitles.length > 0
-        ? `\n\nIMPORTANT: Avoid creating recipes too similar to these existing ones:
-${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
-        : "";
+    console.log(`\n🤖 Generating ${remainingNeeded} recipes with AI...`);
 
     // Generate remaining recipes with AI
     const modifiedRequest = {
@@ -502,35 +583,37 @@ ${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
 
     // Extract recipes from AI response
     if (aiMealPlan.days && Array.isArray(aiMealPlan.days)) {
+      console.log(`AI returned ${aiMealPlan.days.length} days`);
       for (const day of aiMealPlan.days) {
         if (day.meals) {
           const mealTypes = ["breakfast", "lunch", "dinner"];
           for (const mealType of mealTypes) {
             const meal = day.meals[mealType];
             if (meal && meal.title) {
-              aiGeneratedRecipes.push(meal);
+              aiGeneratedRecipes.push(meal as RecipeWithSimilarity);
             }
           }
         }
       }
     }
 
-    console.log(`AI generated ${aiGeneratedRecipes.length} recipes`);
+    console.log(
+      `AI generated ${aiGeneratedRecipes.length} recipes (requested ${remainingNeeded})`
+    );
   }
 
-  // PHASE 4: Deduplicate & Finalize
+  // PHASE 3: Combine and finalize
   const allRecipes = [...dbRecipes, ...aiGeneratedRecipes];
-  let finalRecipes: any[] = [];
-  // let seenRecipes: Array<{ title: string; ingredients: any }> = []; // Temporarily disabled for testing
 
   // DUPLICATE DETECTION TEMPORARILY DISABLED FOR TESTING
   // The AI is instructed to avoid duplicates, so let's test if that's sufficient
   // Uncomment this section if AI generates too many similar recipes
 
   // First pass: deduplicate
+  // let finalRecipes: RecipeWithSimilarity[] = [];
+  // let seenRecipes: Array<{ title: string; ingredients: unknown }> = [];
   // for (const recipe of allRecipes) {
   //   const ingredients = recipe.ingredients || [];
-
   //   if (!isDuplicateRecipe(recipe.title, ingredients, seenRecipes)) {
   //     finalRecipes.push(recipe);
   //     seenRecipes.push({ title: recipe.title, ingredients });
@@ -540,7 +623,7 @@ ${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
   // }
 
   // Without duplicate detection, just use all recipes
-  finalRecipes = allRecipes;
+  const finalRecipes: RecipeWithSimilarity[] = allRecipes;
 
   // REGENERATION LOGIC ALSO DISABLED FOR TESTING
   // If we filtered out duplicates and don't have enough, generate more
@@ -612,11 +695,15 @@ ${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
   // }
 
   // Build final meal plan structure
+  console.log(
+    `Building meal plan with ${finalRecipes.length} recipes (${dbRecipes.length} from DB, ${aiGeneratedRecipes.length} from AI)`
+  );
   const mealPlan = buildMealPlanFromRecipes(
     finalRecipes.slice(0, numRecipes),
     request.preferences.startDate,
     request.preferences.endDate
   );
+  console.log(`Meal plan created with ${mealPlan.days.length} days`);
 
   // Calculate cost savings
   const dbRecipeCount = finalRecipes.filter((r) =>
@@ -634,22 +721,36 @@ ${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
   };
 }
 
+interface MealPlanDay {
+  date: string;
+  meals: {
+    dinner: RecipeWithSimilarity | null;
+  };
+}
+
+interface MealPlanStructure {
+  startDate: string;
+  endDate: string;
+  days: MealPlanDay[];
+}
+
 /**
  * Build meal plan structure from recipes
+ * Creates as many days as needed to include all recipes
  */
 function buildMealPlanFromRecipes(
-  recipes: any[],
+  recipes: RecipeWithSimilarity[],
   startDate: string,
-  endDate: string
-): any {
+  _endDate: string
+): MealPlanStructure {
   const start = new Date(startDate);
-  const end = new Date(endDate);
-  const days: any[] = [];
+  const days: MealPlanDay[] = [];
 
   let recipeIndex = 0;
   const currentDate = new Date(start);
 
-  while (currentDate <= end && recipeIndex < recipes.length) {
+  // Create days for all recipes, extending beyond endDate if necessary
+  while (recipeIndex < recipes.length) {
     const dateStr = currentDate.toISOString().split("T")[0];
 
     days.push({
@@ -663,9 +764,13 @@ function buildMealPlanFromRecipes(
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
+  // Calculate actual end date (may extend beyond requested endDate)
+  const actualEndDate = new Date(currentDate);
+  actualEndDate.setDate(actualEndDate.getDate() - 1); // Go back one day since we incremented after last recipe
+
   return {
     startDate,
-    endDate,
+    endDate: actualEndDate.toISOString().split("T")[0],
     days,
   };
 }
@@ -675,10 +780,8 @@ function buildMealPlanFromRecipes(
  */
 export async function generateHybridReplacement(
   request: ReplaceRecipeRequest
-): Promise<{ recipe: any; source: "database" | "ai" }> {
+): Promise<{ recipe: RecipeWithSimilarity; source: "database" | "ai" }> {
   // Search database first
-  const { generateReplacementEmbedding } = await import("./embedding-utils");
-
   const candidates = await searchRecipeByQuery(
     `${request.replacementReason} alternative to ${request.originalRecipe.title}`,
     {
@@ -746,7 +849,7 @@ export async function generateHybridRecipe(
     dietStyle?: string;
     allergies?: string[];
   }
-): Promise<{ recipe: any; source: "database" | "ai" }> {
+): Promise<{ recipe: RecipeWithSimilarity; source: "database" | "ai" }> {
   // Search database first
   const candidates = await searchRecipeByQuery(query, {
     limit: 5,
