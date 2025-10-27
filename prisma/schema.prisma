@@ -3,11 +3,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -81,6 +83,10 @@ model Recipe {
   ingredients  Json     // Array of IngredientJSON objects
   steps        Json?    // Array of StepJSON objects
   
+  // Semantic search
+  embedding           Unsupported("vector(384)")?
+  embeddingVersion    Int?     @default(1)
+  
   // Metadata
   source       String?  // "generated", "pasted", "meal-plan"
   createdAt    DateTime @default(now())
@@ -88,6 +94,7 @@ model Recipe {
   
   // Relations
   posts        RecipePost[]
+  usages       RecipeUsage[]
   
   @@index([userId])
   @@index([userId, createdAt])
@@ -193,5 +200,19 @@ model FeedActivity {
   @@index([userId])
   @@index([createdAt])
   @@index([activityType])
+}
+
+// Track recipe usage in meal plans for variety tracking
+model RecipeUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  recipeId  String
+  usedAt    DateTime @default(now())
+  
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, usedAt])
+  @@index([recipeId, usedAt])
+  @@index([userId, recipeId, usedAt])
 }
 

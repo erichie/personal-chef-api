@@ -2,9 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
-import { generateMealPlan, type MealPlanRequest } from "@/lib/ai-utils";
+import { generateHybridMealPlan, type MealPlanRequest } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
+import { generateRecipeEmbedding } from "@/lib/embedding-utils";
+import { recordRecipeUsage } from "@/lib/recipe-search-utils";
+
+/**
+ * Sanitize meal plan data to convert null values to undefined
+ * This prevents validation errors on the frontend
+ */
+function sanitizeMealPlan(mealPlan: any): any {
+  if (!mealPlan || typeof mealPlan !== "object") return mealPlan;
+
+  // Deep clone to avoid mutating original
+  const sanitized = JSON.parse(
+    JSON.stringify(mealPlan, (key, value) => {
+      // Convert null to undefined (undefined values will be omitted in JSON)
+      return value === null ? undefined : value;
+    })
+  );
+
+  return sanitized;
+}
 
 const mealPlanRequestSchema = z.object({
   numRecipes: z.number().optional(),
@@ -49,12 +69,14 @@ export async function POST(request: NextRequest) {
     // TODO: Check user credits/tokens before generating
     // TODO: Deduct credits after successful generation
 
-    // Generate meal plan using OpenAI
-    const mealPlanData = await generateMealPlan(payload);
+    // Generate meal plan using hybrid approach (database + AI)
+    const hybridResult = await generateHybridMealPlan(payload, user.id);
+    const mealPlanData = hybridResult.mealPlan;
 
     // Extract recipes from meal plan and store them
     const recipes = [];
     const recipeIdMap = new Map<string, string>(); // Map meal title to recipe ID
+    const recipeIdsUsed: string[] = [];
 
     if (mealPlanData.days && Array.isArray(mealPlanData.days)) {
       for (const day of mealPlanData.days) {
@@ -63,35 +85,83 @@ export async function POST(request: NextRequest) {
           for (const mealType of mealTypes) {
             const meal = day.meals[mealType];
             if (meal && meal.title) {
-              // Check if recipe already exists
-              const existingRecipe = await prisma.recipe.findFirst({
-                where: {
-                  userId: user.id,
-                  title: meal.title,
-                },
-              });
-
               let recipeId: string;
-              if (!existingRecipe) {
-                recipeId = uuidv4();
-                const recipe = await prisma.recipe.create({
-                  data: {
-                    id: recipeId,
+
+              // Check if this is an existing recipe (has an id from database)
+              if (
+                meal.id &&
+                typeof meal.id === "string" &&
+                meal.id.length === 36
+              ) {
+                // This is a recipe from the database
+                recipeId = meal.id;
+                recipeIdsUsed.push(recipeId);
+
+                const existingRecipe = await prisma.recipe.findUnique({
+                  where: { id: recipeId },
+                });
+                if (existingRecipe) {
+                  recipes.push(existingRecipe);
+                }
+              } else {
+                // This is a new AI-generated recipe - store it
+                const existingRecipe = await prisma.recipe.findFirst({
+                  where: {
                     userId: user.id,
                     title: meal.title,
-                    description: meal.description || null,
-                    servings: meal.servings || null,
-                    totalMinutes: meal.totalMinutes || null,
-                    tags: meal.tags || null,
-                    ingredients: meal.ingredients || [],
-                    steps: meal.steps || null,
-                    source: "meal-plan",
                   },
                 });
-                recipes.push(recipe);
-              } else {
-                recipeId = existingRecipe.id;
-                recipes.push(existingRecipe);
+
+                if (!existingRecipe) {
+                  recipeId = uuidv4();
+
+                  // Generate embedding for the new recipe
+                  let embedding: number[] | null = null;
+                  try {
+                    embedding = await generateRecipeEmbedding({
+                      title: meal.title,
+                      description: meal.description,
+                      tags: meal.tags,
+                      ingredients: meal.ingredients,
+                    });
+                  } catch (error) {
+                    console.error("Failed to generate embedding:", error);
+                    // Continue without embedding
+                  }
+
+                  // Create recipe without embedding first
+                  const recipe = await prisma.recipe.create({
+                    data: {
+                      id: recipeId,
+                      userId: user.id,
+                      title: meal.title,
+                      description: meal.description || null,
+                      servings: meal.servings || null,
+                      totalMinutes: meal.totalMinutes || null,
+                      tags: meal.tags || null,
+                      ingredients: meal.ingredients || [],
+                      steps: meal.steps || null,
+                      source: "ai",
+                      embeddingVersion: embedding ? 1 : null,
+                    },
+                  });
+
+                  // Update with embedding using raw SQL if we have one
+                  if (embedding) {
+                    await prisma.$executeRawUnsafe(
+                      `UPDATE "Recipe" SET embedding = $1::vector WHERE id = $2`,
+                      `[${embedding.join(",")}]`,
+                      recipeId
+                    );
+                  }
+
+                  recipes.push(recipe);
+                  recipeIdsUsed.push(recipeId);
+                } else {
+                  recipeId = existingRecipe.id;
+                  recipes.push(existingRecipe);
+                  recipeIdsUsed.push(recipeId);
+                }
               }
 
               // Store the mapping and inject recipeId into the meal
@@ -103,9 +173,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Record recipe usage for tracking
+    await recordRecipeUsage(user.id, recipeIdsUsed);
+
+    // Sanitize meal plan data to remove null values (convert to undefined)
+    const sanitizedMealPlan = sanitizeMealPlan(mealPlanData);
+
     return NextResponse.json({
-      mealPlan: mealPlanData,
+      mealPlan: sanitizedMealPlan,
       recipesCreated: recipes.length,
+      recipesFromDatabase: hybridResult.recipesFromDatabase,
+      recipesGenerated: hybridResult.recipesGenerated,
+      costSavingsEstimate: hybridResult.costSavingsEstimate,
       recipes: recipes.map((r) => ({
         id: r.id,
         title: r.title,

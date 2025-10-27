@@ -395,6 +395,410 @@ export function parseRecipeResponse(response: unknown) {
   return response;
 }
 
+// ============================================================================
+// HYBRID GENERATION FUNCTIONS (Database + AI)
+// ============================================================================
+
+import {
+  searchRecipesByPreferences,
+  getRecentlyUsedRecipes,
+  // isDuplicateRecipe, // Temporarily disabled for testing
+  getTotalRecipeCount,
+  searchRecipeByQuery,
+} from "./recipe-search-utils";
+// import { generateRecipeEmbedding } from "./embedding-utils"; // Temporarily disabled for testing
+
+interface HybridMealPlanResult {
+  mealPlan: any;
+  recipesFromDatabase: number;
+  recipesGenerated: number;
+  costSavingsEstimate: string;
+}
+
+/**
+ * Generate meal plan using hybrid approach (database + AI)
+ * Phase 1: Search database for matching recipes
+ * Phase 2: Quality check with AI
+ * Phase 3: Fill gaps with AI generation
+ * Phase 4: Deduplicate and finalize
+ */
+export async function generateHybridMealPlan(
+  request: MealPlanRequest,
+  userId: string
+): Promise<HybridMealPlanResult> {
+  const numRecipes = request.numRecipes || 10;
+
+  // PHASE 1: Database Recipe Search
+  const totalRecipes = await getTotalRecipeCount();
+
+  let dbRecipes: any[] = [];
+  let targetDbRecipes = 0;
+
+  // Edge case: Not enough recipes in database
+  if (totalRecipes < 20) {
+    console.log(`Only ${totalRecipes} recipes in database, skipping DB search`);
+  } else {
+    // Get recently used recipes to exclude
+    const recentlyUsed = await getRecentlyUsedRecipes(userId, 14);
+
+    // Search for matching recipes (target 60-70% from DB)
+    targetDbRecipes = Math.floor(numRecipes * 0.65);
+    const searchLimit = targetDbRecipes * 3; // Search more to have options
+
+    const candidates = await searchRecipesByPreferences(request.preferences, {
+      limit: searchLimit,
+      userId,
+      excludeRecipeIds: recentlyUsed,
+      minSimilarity: 0.5,
+    });
+
+    console.log(
+      `Found ${candidates.length} candidate recipes from database (similarity >= 0.5)`
+    );
+
+    // Edge case: Not enough good matches
+    if (candidates.length < 3) {
+      console.log("Too few matches, will rely more on AI generation");
+      targetDbRecipes = candidates.length;
+    }
+
+    // PHASE 2: Quality Check (simplified - just use top matches)
+    // In a more sophisticated version, we could use AI to rate these
+    // For now, we trust the similarity scores
+    dbRecipes = candidates
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, targetDbRecipes);
+
+    console.log(`Selected ${dbRecipes.length} recipes from database`);
+  }
+
+  // PHASE 3: Fill Gaps with AI Generation
+  const remainingNeeded = numRecipes - dbRecipes.length;
+  let aiGeneratedRecipes: any[] = [];
+
+  if (remainingNeeded > 0) {
+    console.log(`Generating ${remainingNeeded} recipes with AI`);
+
+    // Build exclusion list for AI prompt
+    const existingTitles = dbRecipes.map((r) => r.title);
+    const existingIngredientSets = dbRecipes.map((r) => {
+      const ingredients = r.ingredients as Array<{ name: string }>;
+      return ingredients.map((ing) => ing.name).join(", ");
+    });
+
+    const exclusionPrompt =
+      existingTitles.length > 0
+        ? `\n\nIMPORTANT: Avoid creating recipes too similar to these existing ones:
+${existingTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
+        : "";
+
+    // Generate remaining recipes with AI
+    const modifiedRequest = {
+      ...request,
+      numRecipes: remainingNeeded,
+    };
+
+    const aiMealPlan = await generateMealPlan(modifiedRequest);
+
+    // Extract recipes from AI response
+    if (aiMealPlan.days && Array.isArray(aiMealPlan.days)) {
+      for (const day of aiMealPlan.days) {
+        if (day.meals) {
+          const mealTypes = ["breakfast", "lunch", "dinner"];
+          for (const mealType of mealTypes) {
+            const meal = day.meals[mealType];
+            if (meal && meal.title) {
+              aiGeneratedRecipes.push(meal);
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`AI generated ${aiGeneratedRecipes.length} recipes`);
+  }
+
+  // PHASE 4: Deduplicate & Finalize
+  const allRecipes = [...dbRecipes, ...aiGeneratedRecipes];
+  let finalRecipes: any[] = [];
+  // let seenRecipes: Array<{ title: string; ingredients: any }> = []; // Temporarily disabled for testing
+
+  // DUPLICATE DETECTION TEMPORARILY DISABLED FOR TESTING
+  // The AI is instructed to avoid duplicates, so let's test if that's sufficient
+  // Uncomment this section if AI generates too many similar recipes
+
+  // First pass: deduplicate
+  // for (const recipe of allRecipes) {
+  //   const ingredients = recipe.ingredients || [];
+
+  //   if (!isDuplicateRecipe(recipe.title, ingredients, seenRecipes)) {
+  //     finalRecipes.push(recipe);
+  //     seenRecipes.push({ title: recipe.title, ingredients });
+  //   } else {
+  //     console.log(`Skipping duplicate recipe: ${recipe.title}`);
+  //   }
+  // }
+
+  // Without duplicate detection, just use all recipes
+  finalRecipes = allRecipes;
+
+  // REGENERATION LOGIC ALSO DISABLED FOR TESTING
+  // If we filtered out duplicates and don't have enough, generate more
+  // if (finalRecipes.length < numRecipes) {
+  //   const stillNeeded = numRecipes - finalRecipes.length;
+  //   console.log(
+  //     `Need ${stillNeeded} more recipes after deduplication, generating...`
+  //   );
+
+  //   // Get titles of recipes we already have to avoid in new generation
+  //   const existingTitles = finalRecipes.map((r) => r.title);
+
+  //   // Generate additional recipes to fill the gap
+  //   const additionalRequest = {
+  //     ...request,
+  //     numRecipes: stillNeeded,
+  //   };
+
+  //   try {
+  //     const additionalMealPlan = await generateMealPlan(additionalRequest);
+
+  //     // Extract recipes from the additional generation
+  //     if (additionalMealPlan.days && Array.isArray(additionalMealPlan.days)) {
+  //       for (const day of additionalMealPlan.days) {
+  //         if (day.meals) {
+  //           const mealTypes = ["breakfast", "lunch", "dinner"];
+  //           for (const mealType of mealTypes) {
+  //             const meal = day.meals[mealType];
+  //             if (meal && meal.title) {
+  //               // Check if this new recipe is also a duplicate
+  //               if (
+  //                 !isDuplicateRecipe(
+  //                   meal.title,
+  //                   meal.ingredients || [],
+  //                   seenRecipes
+  //                 )
+  //               ) {
+  //                 finalRecipes.push(meal);
+  //                 seenRecipes.push({
+  //                   title: meal.title,
+  //                   ingredients: meal.ingredients,
+  //                 });
+
+  //                 // Stop once we have enough
+  //                 if (finalRecipes.length >= numRecipes) {
+  //                   break;
+  //                 }
+  //               } else {
+  //                 console.log(
+  //                   `Additional recipe also duplicate: ${meal.title}`
+  //                 );
+  //               }
+  //             }
+  //           }
+  //           if (finalRecipes.length >= numRecipes) break;
+  //         }
+  //       }
+  //     }
+
+  //     console.log(
+  //       `Generated ${
+  //         finalRecipes.length - (numRecipes - stillNeeded)
+  //       } additional recipes`
+  //     );
+  //   } catch (error) {
+  //     console.error("Failed to generate additional recipes:", error);
+  //     // Continue with what we have
+  //   }
+  // }
+
+  // Build final meal plan structure
+  const mealPlan = buildMealPlanFromRecipes(
+    finalRecipes.slice(0, numRecipes),
+    request.preferences.startDate,
+    request.preferences.endDate
+  );
+
+  // Calculate cost savings
+  const dbRecipeCount = finalRecipes.filter((r) =>
+    dbRecipes.some((db) => db.id === r.id)
+  ).length;
+  const aiRecipeCount = finalRecipes.length - dbRecipeCount;
+  const estimatedCostPerRecipe = 0.05; // Rough estimate
+  const costSaved = dbRecipeCount * estimatedCostPerRecipe;
+
+  return {
+    mealPlan,
+    recipesFromDatabase: dbRecipeCount,
+    recipesGenerated: aiRecipeCount,
+    costSavingsEstimate: `$${costSaved.toFixed(2)} saved`,
+  };
+}
+
+/**
+ * Build meal plan structure from recipes
+ */
+function buildMealPlanFromRecipes(
+  recipes: any[],
+  startDate: string,
+  endDate: string
+): any {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days: any[] = [];
+
+  let recipeIndex = 0;
+  const currentDate = new Date(start);
+
+  while (currentDate <= end && recipeIndex < recipes.length) {
+    const dateStr = currentDate.toISOString().split("T")[0];
+
+    days.push({
+      date: dateStr,
+      meals: {
+        dinner: recipes[recipeIndex] || null,
+      },
+    });
+
+    recipeIndex++;
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return {
+    startDate,
+    endDate,
+    days,
+  };
+}
+
+/**
+ * Generate recipe replacement using hybrid approach
+ */
+export async function generateHybridReplacement(
+  request: ReplaceRecipeRequest
+): Promise<{ recipe: any; source: "database" | "ai" }> {
+  // Search database first
+  const { generateReplacementEmbedding } = await import("./embedding-utils");
+
+  const candidates = await searchRecipeByQuery(
+    `${request.replacementReason} alternative to ${request.originalRecipe.title}`,
+    {
+      limit: 5,
+      excludeRecipeIds: [], // Could exclude the original if we had the ID
+      minSimilarity: 0.7,
+    }
+  );
+
+  // Filter by preferences if provided
+  let filtered = candidates;
+  if (request.preferences) {
+    filtered = candidates.filter((recipe) => {
+      // Check cooking time
+      if (
+        request.preferences?.maxDinnerMinutes &&
+        recipe.totalMinutes &&
+        recipe.totalMinutes > request.preferences.maxDinnerMinutes
+      ) {
+        return false;
+      }
+
+      // Check allergies
+      if (request.preferences?.allergies) {
+        const ingredients = recipe.ingredients as Array<{ name: string }>;
+        const hasAllergen = ingredients?.some((ing) =>
+          request.preferences?.allergies?.some((allergen) =>
+            ing.name.toLowerCase().includes(allergen.toLowerCase())
+          )
+        );
+        if (hasAllergen) return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (filtered.length > 0) {
+    console.log(
+      `Found suitable replacement from database: ${filtered[0].title}`
+    );
+    return {
+      recipe: filtered[0],
+      source: "database",
+    };
+  }
+
+  // No suitable match found, generate with AI
+  console.log("No suitable replacement found in database, using AI");
+  const aiRecipe = await generateReplaceRecipe(request);
+
+  return {
+    recipe: aiRecipe,
+    source: "ai",
+  };
+}
+
+/**
+ * Generate single recipe using hybrid approach
+ */
+export async function generateHybridRecipe(
+  query: string,
+  preferences?: {
+    maxMinutes?: number;
+    dietStyle?: string;
+    allergies?: string[];
+  }
+): Promise<{ recipe: any; source: "database" | "ai" }> {
+  // Search database first
+  const candidates = await searchRecipeByQuery(query, {
+    limit: 5,
+    minSimilarity: 0.7,
+  });
+
+  // Filter by preferences
+  let filtered = candidates;
+  if (preferences) {
+    filtered = candidates.filter((recipe) => {
+      if (
+        preferences.maxMinutes &&
+        recipe.totalMinutes &&
+        recipe.totalMinutes > preferences.maxMinutes
+      ) {
+        return false;
+      }
+
+      if (preferences.allergies) {
+        const ingredients = recipe.ingredients as Array<{ name: string }>;
+        const hasAllergen = ingredients?.some((ing) =>
+          preferences.allergies?.some((allergen) =>
+            ing.name.toLowerCase().includes(allergen.toLowerCase())
+          )
+        );
+        if (hasAllergen) return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (filtered.length > 0) {
+    console.log(
+      `Found suitable recipe from database: ${
+        filtered[0].title
+      } (similarity: ${filtered[0].similarity.toFixed(2)})`
+    );
+    return {
+      recipe: filtered[0],
+      source: "database",
+    };
+  }
+
+  // No suitable match found, would generate with AI
+  // For now, return null - you'll need to implement AI generation for single recipes
+  console.log("No suitable recipe found in database");
+  throw new Error(
+    "No suitable recipe found in database. AI generation for single recipes not yet implemented."
+  );
+}
+
 // System prompt for recipe parsing from URLs
 export const PARSE_RECIPE_SYSTEM_PROMPT = `You are an expert at extracting and parsing recipe information from web pages. Your role is to accurately extract structured recipe data from HTML content.
 

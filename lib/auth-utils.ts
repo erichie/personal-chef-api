@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import { errors } from "./api-errors";
 import { v4 as uuidv4 } from "uuid";
 import * as bcrypt from "bcrypt";
+import { generateFriendCode } from "./friend-code-generator";
 
 /**
  * Extract session token from request headers
@@ -76,6 +77,28 @@ export async function getUserFromRequest(request: NextRequest) {
 }
 
 /**
+ * Generate a unique friend code (with collision detection)
+ */
+async function generateUniqueFriendCode(): Promise<string> {
+  const maxAttempts = 10;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const code = generateFriendCode();
+
+    // Check if code already exists
+    const existing = await prisma.user.findUnique({
+      where: { friendCode: code },
+    });
+
+    if (!existing) {
+      return code;
+    }
+  }
+
+  throw new Error("Failed to generate unique friend code after 10 attempts");
+}
+
+/**
  * Create a guest user
  */
 export async function createGuestUser(deviceId: string) {
@@ -85,8 +108,19 @@ export async function createGuestUser(deviceId: string) {
   });
 
   if (existingUser) {
+    // If existing user doesn't have a friend code, add one
+    if (!existingUser.friendCode) {
+      const friendCode = await generateUniqueFriendCode();
+      return prisma.user.update({
+        where: { id: existingUser.id },
+        data: { friendCode },
+      });
+    }
     return existingUser;
   }
+
+  // Generate unique friend code for new user
+  const friendCode = await generateUniqueFriendCode();
 
   // Create new guest user
   const user = await prisma.user.create({
@@ -96,6 +130,7 @@ export async function createGuestUser(deviceId: string) {
       isGuest: true,
       email: null,
       passwordHash: null,
+      friendCode,
     },
   });
 

@@ -20,9 +20,9 @@ const generateStepsRequestSchema = z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
-          qty: z.union([z.number(), z.string()]).optional(),
-          unit: z.string().optional(),
-          notes: z.string().optional(),
+          qty: z.union([z.number(), z.string()]).nullable().optional(),
+          unit: z.string().nullable().optional(),
+          notes: z.string().nullable().optional(),
         })
       ),
     })

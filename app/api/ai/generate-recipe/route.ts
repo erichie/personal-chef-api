@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
-import { getOpenAIClient } from "@/lib/ai-utils";
+import { getOpenAIClient, generateHybridRecipe } from "@/lib/ai-utils";
+import { searchRecipeByQuery } from "@/lib/recipe-search-utils";
 
 // Request validation schema
 const generateRecipeRequestSchema = z.object({
@@ -19,9 +20,9 @@ const generateRecipeRequestSchema = z.object({
       ingredients: z.array(
         z.object({
           name: z.string(),
-          qty: z.union([z.number(), z.string()]).optional(),
-          unit: z.string().optional(),
-          notes: z.string().optional(),
+          qty: z.union([z.number(), z.string()]).nullable().optional(),
+          unit: z.string().nullable().optional(),
+          notes: z.string().nullable().optional(),
         })
       ),
       steps: z
@@ -113,8 +114,57 @@ Return a JSON recipe with the following structure:
         2
       )}`;
     } else {
-      // New recipe generation mode
+      // New recipe generation mode - try hybrid search first
       const prefs = payload.preferences || {};
+
+      // Try to find a matching recipe in the database first
+      try {
+        const candidates = await searchRecipeByQuery(payload.prompt!, {
+          limit: 3,
+          minSimilarity: 0.75, // Higher threshold for single recipe match
+        });
+
+        // Filter by preferences
+        let filtered = candidates.filter((recipe) => {
+          if (
+            prefs.maxMinutes &&
+            recipe.totalMinutes &&
+            recipe.totalMinutes > prefs.maxMinutes
+          ) {
+            return false;
+          }
+          if (prefs.allergies) {
+            const ingredients = recipe.ingredients as Array<{ name: string }>;
+            const hasAllergen = ingredients?.some((ing) =>
+              prefs.allergies?.some((allergen) =>
+                ing.name.toLowerCase().includes(allergen.toLowerCase())
+              )
+            );
+            if (hasAllergen) return false;
+          }
+          return true;
+        });
+
+        if (filtered.length > 0) {
+          // Found a suitable recipe in database
+          console.log(
+            `Found recipe from database: ${
+              filtered[0].title
+            } (similarity: ${filtered[0].similarity.toFixed(2)})`
+          );
+          return NextResponse.json({
+            recipe: filtered[0],
+            source: "database",
+            message: "Recipe found in database",
+          });
+        }
+      } catch (error) {
+        console.error("Error searching database for recipe:", error);
+        // Continue with AI generation if search fails
+      }
+
+      // No match found, generate with AI
+      console.log("No suitable recipe found in database, generating with AI");
 
       systemPrompt = `You are a professional chef creating personalized recipes. 
 Generate a complete recipe based on the user's request and preferences.
@@ -234,7 +284,11 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
       recipe.servings = payload.preferences.householdSize;
     }
 
-    return NextResponse.json({ recipe });
+    return NextResponse.json({
+      recipe,
+      source: "ai",
+      message: "Recipe generated with AI",
+    });
   } catch (error) {
     return handleApiError(error);
   }

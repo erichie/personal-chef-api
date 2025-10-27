@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./prisma";
+import { generateFriendCode } from "./friend-code-generator";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -29,6 +30,30 @@ export const auth = betterAuth({
     process.env.BETTER_AUTH_URL || "http://localhost:3000",
     // Add production URLs when deploying
   ],
+  onAfterSignUp: async (user: { id: string; email?: string }) => {
+    // Generate friend code for new users
+    const maxAttempts = 10;
+    let friendCode: string | null = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const code = generateFriendCode();
+      const existing = await prisma.user.findUnique({
+        where: { friendCode: code },
+      });
+
+      if (!existing) {
+        friendCode = code;
+        break;
+      }
+    }
+
+    if (friendCode) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { friendCode },
+      });
+    }
+  },
 });
 
 export type Session = typeof auth.$Infer.Session.session;
