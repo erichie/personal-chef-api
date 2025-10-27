@@ -174,6 +174,8 @@ export async function createSessionForUser(userId: string) {
       userId,
       token,
       expiresAt,
+      ipAddress: null,
+      userAgent: null,
     },
   });
 
