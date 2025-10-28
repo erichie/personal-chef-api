@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         friendCode: true,
         bio: true,
         avatarUrl: true,
-        isGuest: true,
+        isAnonymous: true,
         createdAt: true,
         updatedAt: true,
         profile: {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
         friendCode: userData.friendCode,
         bio: userData.bio,
         avatarUrl: userData.avatarUrl,
-        isGuest: userData.isGuest,
+        isAnonymous: userData.isAnonymous,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
         hasCompletedIntake: !!userData.profile?.chefIntake,
@@ -96,7 +96,7 @@ export async function PATCH(request: NextRequest) {
         friendCode: true,
         bio: true,
         avatarUrl: true,
-        isGuest: true,
+        isAnonymous: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -107,4 +107,3 @@ export async function PATCH(request: NextRequest) {
     return handleApiError(error);
   }
 }
-

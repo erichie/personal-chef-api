@@ -1,34 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { createGuestUser, createSessionForUser } from "@/lib/auth-utils";
+import { auth } from "@/lib/auth";
 import { handleApiError } from "@/lib/api-errors";
 
-const guestRequestSchema = z.object({
-  deviceId: z.string().min(1, "Device ID is required"),
-});
-
+/**
+ * POST /api/auth/guest
+ * Create an anonymous user session using better-auth's anonymous plugin
+ * This endpoint is a simple proxy to better-auth's anonymous sign-in
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { deviceId } = guestRequestSchema.parse(body);
+    // Use better-auth's anonymous sign-in
+    const result = await auth.api.signInAnonymous({
+      headers: request.headers,
+    });
 
-    // Create or retrieve guest user
-    const user = await createGuestUser(deviceId);
-
-    // Create session
-    const session = await createSessionForUser(user.id);
-
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        deviceId: user.deviceId,
-        isGuest: user.isGuest,
-        createdAt: user.createdAt,
-      },
-      session: {
-        token: session.token,
-        expiresAt: session.expiresAt,
-      },
+    return NextResponse.json(result, {
+      status: 200,
     });
   } catch (error) {
     return handleApiError(error);

@@ -17,8 +17,7 @@ model User {
   email         String?  @unique
   emailVerified Boolean  @default(false)
   passwordHash  String?
-  isGuest       Boolean  @default(true)
-  deviceId      String   @unique
+  isAnonymous   Boolean  @default(false)
   
   // Social features
   displayName   String?

@@ -234,7 +234,7 @@ export async function searchUsers(
           ],
         },
         { id: { not: currentUserId } }, // Exclude self
-        { isGuest: false }, // Only registered users
+        { isAnonymous: false }, // Only registered users
       ],
     },
     select: {

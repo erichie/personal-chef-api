@@ -1,46 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { getUserFromRequest, migrateGuestData } from "@/lib/auth-utils";
 import { handleApiError, errors } from "@/lib/api-errors";
-import { prisma } from "@/lib/prisma";
 
-const linkDeviceSchema = z.object({
-  deviceId: z.string().min(1, "Device ID is required"),
-});
-
+/**
+ * POST /api/auth/link-device
+ *
+ * DEPRECATED: This endpoint is no longer needed.
+ *
+ * With better-auth's anonymous plugin, linking happens automatically when
+ * an anonymous user signs up or signs in with email/password or OAuth.
+ * The onLinkAccount callback in lib/auth.ts handles all data migration.
+ *
+ * For account switching on the same device, users should:
+ * 1. Sign out of current account
+ * 2. Sign in with a different account
+ */
 export async function POST(request: NextRequest) {
   try {
-    // Require authenticated user (not guest)
-    const authenticatedUser = await getUserFromRequest(request);
-
-    if (authenticatedUser.isGuest) {
-      throw errors.forbidden("Guest users cannot link devices");
-    }
-
-    const body = await request.json();
-    const { deviceId } = linkDeviceSchema.parse(body);
-
-    // Find guest user by deviceId
-    const guestUser = await prisma.user.findUnique({
-      where: { deviceId },
-    });
-
-    if (!guestUser) {
-      throw errors.notFound("Guest user not found with this device ID");
-    }
-
-    if (!guestUser.isGuest) {
-      throw errors.badRequest("This device is already linked to an account");
-    }
-
-    // Migrate guest data to authenticated user
-    await migrateGuestData(guestUser.id, authenticatedUser.id);
-
-    return NextResponse.json({
-      success: true,
-      message: "Device linked successfully",
-      userId: authenticatedUser.id,
-    });
+    throw errors.badRequest(
+      "This endpoint is deprecated. Anonymous users are automatically linked when signing up or signing in. " +
+        "For account switching, please sign out and sign in with a different account."
+    );
   } catch (error) {
     return handleApiError(error);
   }

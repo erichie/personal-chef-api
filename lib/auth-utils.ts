@@ -99,49 +99,13 @@ async function generateUniqueFriendCode(): Promise<string> {
 }
 
 /**
- * Create a guest user
+ * Create a guest user (deprecated - use better-auth's anonymous sign-in)
+ * This function is kept for backward compatibility but should not be used
  */
 export async function createGuestUser(deviceId: string) {
-  // Check if guest user already exists with this deviceId
-  const existingUser = await prisma.user.findUnique({
-    where: { deviceId },
-  });
-
-  if (existingUser) {
-    // If existing user doesn't have a friend code, add one
-    if (!existingUser.friendCode) {
-      const friendCode = await generateUniqueFriendCode();
-      return prisma.user.update({
-        where: { id: existingUser.id },
-        data: { friendCode },
-      });
-    }
-    return existingUser;
-  }
-
-  // Generate unique friend code for new user
-  const friendCode = await generateUniqueFriendCode();
-
-  // Create new guest user
-  const user = await prisma.user.create({
-    data: {
-      id: uuidv4(),
-      deviceId,
-      isGuest: true,
-      email: null,
-      passwordHash: null,
-      friendCode,
-    },
-  });
-
-  // Create empty profile for the guest user
-  await prisma.userProfile.create({
-    data: {
-      userId: user.id,
-    },
-  });
-
-  return user;
+  throw new Error(
+    "createGuestUser is deprecated. Use auth.api.signInAnonymous() instead."
+  );
 }
 
 /**
@@ -274,35 +238,23 @@ export async function verifyPassword(
 }
 
 /**
- * Check if request has valid authentication (guest or registered)
+ * Check if request has valid authentication (anonymous or registered)
+ * Both anonymous and registered users use session-based authentication
  */
 export async function requireAuth(request: NextRequest) {
-  // First check for session token (standard auth)
   const token = getTokenFromRequest(request);
-  if (token) {
-    try {
-      const session = await getSessionFromRequest(request);
-      const user = await getUserFromSession(session);
-      return { user, session };
-    } catch (error) {
-      // Continue to check device ID
-    }
+
+  if (!token) {
+    throw errors.unauthorized("Authentication required");
   }
 
-  // Check for device ID (guest auth)
-  const deviceId = request.headers.get("X-Device-ID");
-  if (deviceId) {
-    const user = await prisma.user.findUnique({
-      where: { deviceId },
-      include: { profile: true },
-    });
-
-    if (user && user.isGuest) {
-      return { user, session: null };
-    }
+  try {
+    const session = await getSessionFromRequest(request);
+    const user = await getUserFromSession(session);
+    return { user, session };
+  } catch (error) {
+    throw errors.unauthorized("Authentication required");
   }
-
-  throw errors.unauthorized("Authentication required");
 }
 
 /**
