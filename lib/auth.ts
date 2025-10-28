@@ -194,22 +194,10 @@ export const auth = betterAuth({
     // Add production URLs when deploying
   ],
   onAfterSignUp: async (user: { id: string; email?: string }) => {
-    // Generate friend code for new users (registered sign-ups)
+    // Generate friend code for new users (registered sign-ups without anonymous conversion)
     console.log(`onAfterSignUp called for user ${user.id}`);
     await ensureUserHasFriendCode(user.id);
     console.log(`Friend code ensured for user ${user.id}`);
-  },
-  onAfterSignIn: async (user: { id: string; email?: string }) => {
-    // Generate friend code for anonymous users on first sign-in
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { friendCode: true, isAnonymous: true },
-    });
-
-    // Only generate for anonymous users without a friend code
-    if (dbUser?.isAnonymous && !dbUser.friendCode) {
-      await ensureUserHasFriendCode(user.id);
-    }
   },
 });
 
