@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const parsePantryRequestSchema = z.object({
@@ -92,6 +93,9 @@ Example output:
         ...(item.category && { category: item.category }),
       }))
       .filter((item: any) => item.quantity > 0);
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.PARSE_PANTRY);
 
     return NextResponse.json({ items: normalizedItems });
   } catch (error) {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const explainInstructionRequestSchema = z.object({
@@ -65,6 +66,9 @@ Explain this instruction in detail.`;
         { status: 500 }
       );
     }
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.EXPLAIN_INSTRUCTION);
 
     return NextResponse.json({ explanation: explanation.trim() });
   } catch (error) {

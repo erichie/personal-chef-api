@@ -5,6 +5,7 @@ import { handleApiError } from "@/lib/api-errors";
 import { parseRecipeFromUrl } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 const parseRecipeRequestSchema = z.object({
   url: z.string().url("Invalid URL format"),
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
         source: "pasted",
       },
     });
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.PARSE_RECIPE);
 
     return NextResponse.json({
       recipe: {

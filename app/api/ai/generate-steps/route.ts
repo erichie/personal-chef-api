@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const generateStepsRequestSchema = z.object({
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
         description: dbRecipe.description || undefined,
         servings: dbRecipe.servings || undefined,
         totalMinutes: dbRecipe.totalMinutes || undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ingredients: dbRecipe.ingredients as any[],
       };
     } else {
@@ -182,16 +184,20 @@ Please generate clear, step-by-step cooking instructions.`;
     console.log(`✅ Generated ${result.steps.length} cooking steps`);
 
     // If recipeId was provided, automatically save the steps to the database
-    let recipeId = payload.recipeId;
+    const recipeId = payload.recipeId;
     if (recipeId) {
       await prisma.recipe.update({
         where: { id: recipeId },
         data: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           steps: result.steps as any,
         },
       });
       console.log(`💾 Saved steps to recipe ${recipeId} in database`);
     }
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.GENERATE_STEPS);
 
     return NextResponse.json({
       steps: result.steps,

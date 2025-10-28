@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const chatInstructionRequestSchema = z.object({
@@ -70,6 +71,9 @@ If they're asking about substitutions, timing, or techniques, provide specific a
         { status: 500 }
       );
     }
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.CHAT_INSTRUCTION);
 
     return NextResponse.json({ response: response.trim() });
   } catch (error) {

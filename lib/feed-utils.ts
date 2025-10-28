@@ -138,6 +138,11 @@ export async function getFriendsFeed(
                 userId: true,
               },
             },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
           },
         });
 
@@ -149,6 +154,7 @@ export async function getFriendsFeed(
           post = {
             ...post,
             likeCount: post.likes.length,
+            commentCount: post.comments.length,
             isLikedByCurrentUser,
           };
         }
@@ -270,6 +276,11 @@ export async function getUserActivity(
                 userId: true,
               },
             },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
           },
         });
 
@@ -280,6 +291,7 @@ export async function getUserActivity(
           post = {
             ...post,
             likeCount: post.likes.length,
+            commentCount: post.comments.length,
             isLikedByCurrentUser,
           };
         }

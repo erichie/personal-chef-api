@@ -7,6 +7,13 @@ import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { generateRecipeEmbedding } from "@/lib/embedding-utils";
 import { recordRecipeUsage } from "@/lib/recipe-search-utils";
+import {
+  checkMealPlanLimit,
+  trackAiUsage,
+  AiEndpoint,
+  validateUserTokens,
+  MEAL_PLAN_TOKEN_COST,
+} from "@/lib/ai-usage-utils";
 
 /**
  * Sanitize meal plan data to convert null values to undefined
@@ -57,6 +64,7 @@ const mealPlanRequestSchema = z.object({
     )
     .optional(),
   preferencesExplanation: z.string().optional(),
+  tokensToUse: z.number().optional(), // Optional: tokens to use to bypass limit
 });
 
 export async function POST(request: NextRequest) {
@@ -64,10 +72,71 @@ export async function POST(request: NextRequest) {
     const { user } = await requireAuth(request);
 
     const body = await request.json();
-    const payload: MealPlanRequest = mealPlanRequestSchema.parse(body);
+    const payload = mealPlanRequestSchema.parse(body);
 
-    // TODO: Check user credits/tokens before generating
-    // TODO: Deduct credits after successful generation
+    let usedTokens = false;
+
+    // If tokens are provided, validate them instead of checking limit
+    if (payload.tokensToUse !== undefined) {
+      // Validate token amount is correct
+      if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
+        return NextResponse.json(
+          {
+            error: "Invalid token amount",
+            code: "INVALID_TOKEN_AMOUNT",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              provided: payload.tokensToUse,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      // Validate user has enough tokens
+      const tokenValidation = await validateUserTokens(
+        user.id,
+        MEAL_PLAN_TOKEN_COST
+      );
+
+      if (!tokenValidation.valid) {
+        return NextResponse.json(
+          {
+            error: tokenValidation.error || "Insufficient tokens",
+            code: "INSUFFICIENT_TOKENS",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              currentBalance: tokenValidation.currentBalance,
+            },
+          },
+          { status: 402 } // Payment Required
+        );
+      }
+
+      usedTokens = true;
+      console.log(
+        `User ${user.id} using ${MEAL_PLAN_TOKEN_COST} tokens for meal plan`
+      );
+    } else {
+      // No tokens provided - check normal limit
+      const limitCheck = await checkMealPlanLimit(user.id);
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Meal plan generation limit reached",
+            code: "LIMIT_EXCEEDED",
+            details: {
+              limit: limitCheck.limit,
+              used: limitCheck.used,
+              remaining: limitCheck.remaining,
+              resetsAt: limitCheck.resetsAt,
+              tokenCost: MEAL_PLAN_TOKEN_COST, // Inform user about token option
+            },
+          },
+          { status: 429 }
+        );
+      }
+    }
 
     // Generate meal plan using hybrid approach (database + AI)
     const hybridResult = await generateHybridMealPlan(payload, user.id);
@@ -176,6 +245,9 @@ export async function POST(request: NextRequest) {
     // Record recipe usage for tracking
     await recordRecipeUsage(user.id, recipeIdsUsed);
 
+    // Track AI endpoint usage
+    await trackAiUsage(user.id, AiEndpoint.MEAL_PLAN);
+
     // Sanitize meal plan data to remove null values (convert to undefined)
     const sanitizedMealPlan = sanitizeMealPlan(mealPlanData);
 
@@ -192,7 +264,11 @@ export async function POST(request: NextRequest) {
         servings: r.servings,
         totalMinutes: r.totalMinutes,
       })),
-      message: "Meal plan generated successfully",
+      usedTokens, // Indicates if tokens were used (mobile app should deduct)
+      tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0, // Amount to deduct
+      message: usedTokens
+        ? "Meal plan generated successfully using tokens"
+        : "Meal plan generated successfully",
     });
   } catch (error) {
     return handleApiError(error);

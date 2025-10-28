@@ -18,6 +18,7 @@ model User {
   emailVerified Boolean  @default(false)
   passwordHash  String?
   isAnonymous   Boolean  @default(false)
+  isPro         Boolean  @default(false)
   
   // Social features
   displayName   String?
@@ -238,5 +239,17 @@ model RecipeUsage {
   @@index([userId, usedAt])
   @@index([recipeId, usedAt])
   @@index([userId, recipeId, usedAt])
+}
+
+// Track AI endpoint usage for rate limiting and analytics
+model AiUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   // meal-plan, generate-recipe, replace-recipe, etc.
+  createdAt DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([endpoint])
+  @@index([userId, endpoint, createdAt])
 }
 

@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient, generateHybridRecipe } from "@/lib/ai-utils";
 import { searchRecipeByQuery } from "@/lib/recipe-search-utils";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const generateRecipeRequestSchema = z.object({
@@ -60,8 +61,8 @@ const generateRecipeRequestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication (user credentials validated but not directly used)
-    await requireAuth(request);
+    // Verify authentication
+    const { user } = await requireAuth(request);
 
     const body = await request.json();
     const payload = generateRecipeRequestSchema.parse(body);
@@ -152,6 +153,10 @@ Return a JSON recipe with the following structure:
               filtered[0].title
             } (similarity: ${filtered[0].similarity.toFixed(2)})`
           );
+
+          // Track usage
+          await trackAiUsage(user.id, AiEndpoint.GENERATE_RECIPE);
+
           return NextResponse.json({
             recipe: filtered[0],
             source: "database",
@@ -283,6 +288,9 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
     if (!recipe.servings && payload.preferences?.householdSize) {
       recipe.servings = payload.preferences.householdSize;
     }
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.GENERATE_RECIPE);
 
     return NextResponse.json({
       recipe,

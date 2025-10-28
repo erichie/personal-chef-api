@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { generateRecipeEmbedding } from "@/lib/embedding-utils";
+import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
 
 const replaceRecipeRequestSchema = z.object({
   originalRecipe: z.object({
@@ -84,6 +85,9 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    // Track usage
+    await trackAiUsage(user.id, AiEndpoint.REPLACE_RECIPE);
 
     return NextResponse.json({
       recipe: {

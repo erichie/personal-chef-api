@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
+import { getAiUsageStats, MEAL_PLAN_TOKEN_COST } from "@/lib/ai-usage-utils";
 
 /**
  * GET /api/me
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
         bio: true,
         avatarUrl: true,
         isAnonymous: true,
+        isPro: true,
         createdAt: true,
         updatedAt: true,
         profile: {
@@ -38,6 +40,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Get AI usage statistics
+    const usageStats = await getAiUsageStats(user.id);
+
     return NextResponse.json({
       user: {
         id: userData.id,
@@ -47,11 +52,18 @@ export async function GET(request: NextRequest) {
         bio: userData.bio,
         avatarUrl: userData.avatarUrl,
         isAnonymous: userData.isAnonymous,
+        isPro: userData.isPro,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
         hasCompletedIntake: !!userData.profile?.chefIntake,
         lastSyncedAt: userData.profile?.lastSyncedAt,
         syncVersion: userData.profile?.syncVersion ?? 0,
+        // AI usage statistics
+        mealPlanUsage: usageStats.mealPlan.count,
+        mealPlanLimit: usageStats.mealPlan.limit,
+        mealPlanRemaining: usageStats.mealPlan.remaining,
+        mealPlanResetsAt: usageStats.mealPlan.resetsAt,
+        mealPlanTokenCost: MEAL_PLAN_TOKEN_COST, // Cost to bypass limit with tokens
       },
     });
   } catch (error) {
@@ -97,6 +109,7 @@ export async function PATCH(request: NextRequest) {
         bio: true,
         avatarUrl: true,
         isAnonymous: true,
+        isPro: true,
         createdAt: true,
         updatedAt: true,
       },
