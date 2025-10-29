@@ -3,9 +3,17 @@ import { prisma } from "./prisma";
 /**
  * Constants for AI usage limits
  */
-export const MEAL_PLAN_LIMIT = 8; // Meal plans allowed per 30-day rolling window
-export const USAGE_WINDOW_DAYS = 30; // Rolling window for usage tracking
+// Free user limits (lifetime)
+export const FREE_MEAL_PLAN_LIMIT = 3;
+export const FREE_ENDPOINT_LIMIT = 3; // Per endpoint
+
+// Pro user limits
+export const PRO_MEAL_PLAN_LIMIT = 10; // Per 30-day rolling window
+export const PRO_ENDPOINT_LIMIT = Infinity; // Unlimited (but easy to change)
+
+// Token costs
 export const MEAL_PLAN_TOKEN_COST = 25; // Tokens required to bypass limit
+export const USAGE_WINDOW_DAYS = 30; // Rolling window for pro users only
 
 /**
  * AI endpoint identifiers
@@ -82,21 +90,82 @@ export async function getMealPlanUsage(userId: string): Promise<number> {
 }
 
 /**
- * Check if user can generate a meal plan (within limit)
+ * Generic function to check endpoint limit based on user type
  */
-export async function checkMealPlanLimit(
-  userId: string
+export async function checkEndpointLimit(
+  userId: string,
+  endpoint: AiEndpoint
 ): Promise<UsageLimitCheck> {
-  const windowStart = getWindowStartDate();
+  // Fetch user's pro status
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isPro: true },
+  });
 
-  // Get usage in the current window
-  const usages = await prisma.aiUsage.findMany({
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const isPro = user.isPro;
+
+  // Pro users: unlimited for everything except meal plans
+  if (isPro && endpoint !== AiEndpoint.MEAL_PLAN) {
+    return {
+      allowed: true,
+      limit: Infinity,
+      used: 0,
+      remaining: Infinity,
+      resetsAt: null,
+    };
+  }
+
+  // Pro users for meal plans: 10 per 30 days
+  if (isPro && endpoint === AiEndpoint.MEAL_PLAN) {
+    const windowStart = getWindowStartDate();
+
+    const usages = await prisma.aiUsage.findMany({
+      where: {
+        userId,
+        endpoint: AiEndpoint.MEAL_PLAN,
+        createdAt: {
+          gte: windowStart,
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        createdAt: true,
+      },
+    });
+
+    const used = usages.length;
+    const limit = PRO_MEAL_PLAN_LIMIT;
+    const remaining = Math.max(0, limit - used);
+    const allowed = used < limit;
+
+    // Calculate reset date (when oldest usage expires)
+    let resetsAt: Date | null = null;
+    if (usages.length > 0) {
+      const oldestUsage = usages[0].createdAt;
+      resetsAt = new Date(oldestUsage);
+      resetsAt.setDate(resetsAt.getDate() + USAGE_WINDOW_DAYS);
+    }
+
+    return {
+      allowed,
+      limit,
+      used,
+      remaining,
+      resetsAt,
+    };
+  }
+
+  // Free users: lifetime limit of 3 for all endpoints
+  const lifetimeUsages = await prisma.aiUsage.findMany({
     where: {
       userId,
-      endpoint: AiEndpoint.MEAL_PLAN,
-      createdAt: {
-        gte: windowStart,
-      },
+      endpoint,
     },
     orderBy: {
       createdAt: "asc",
@@ -106,80 +175,142 @@ export async function checkMealPlanLimit(
     },
   });
 
-  const used = usages.length;
-  const remaining = Math.max(0, MEAL_PLAN_LIMIT - used);
-  const allowed = used < MEAL_PLAN_LIMIT;
-
-  // Calculate when the oldest usage will expire (reset date)
-  let resetsAt: Date | null = null;
-  if (usages.length > 0 && !allowed) {
-    // If at limit, the reset is when the oldest usage expires
-    const oldestUsage = usages[0].createdAt;
-    resetsAt = new Date(oldestUsage);
-    resetsAt.setDate(resetsAt.getDate() + USAGE_WINDOW_DAYS);
-  } else if (usages.length > 0) {
-    // If not at limit, but have usages, show when the oldest will expire
-    const oldestUsage = usages[0].createdAt;
-    resetsAt = new Date(oldestUsage);
-    resetsAt.setDate(resetsAt.getDate() + USAGE_WINDOW_DAYS);
-  }
+  const used = lifetimeUsages.length;
+  const limit = FREE_ENDPOINT_LIMIT;
+  const remaining = Math.max(0, limit - used);
+  const allowed = used < limit;
 
   return {
     allowed,
-    limit: MEAL_PLAN_LIMIT,
+    limit,
     used,
     remaining,
-    resetsAt,
+    resetsAt: null, // Lifetime limits never reset
   };
 }
 
 /**
+ * Check if user can generate a meal plan (within limit)
+ */
+export async function checkMealPlanLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.MEAL_PLAN);
+}
+
+/**
+ * Check if user can generate a recipe (within limit)
+ */
+export async function checkGenerateRecipeLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.GENERATE_RECIPE);
+}
+
+/**
+ * Check if user can replace a recipe (within limit)
+ */
+export async function checkReplaceRecipeLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.REPLACE_RECIPE);
+}
+
+/**
+ * Check if user can parse a recipe (within limit)
+ */
+export async function checkParseRecipeLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.PARSE_RECIPE);
+}
+
+/**
+ * Check if user can generate steps (within limit)
+ */
+export async function checkGenerateStepsLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.GENERATE_STEPS);
+}
+
+/**
+ * Check if user can parse pantry (within limit)
+ */
+export async function checkParsePantryLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.PARSE_PANTRY);
+}
+
+/**
+ * Check if user can use chat instruction (within limit)
+ */
+export async function checkChatInstructionLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.CHAT_INSTRUCTION);
+}
+
+/**
+ * Check if user can use explain instruction (within limit)
+ */
+export async function checkExplainInstructionLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.EXPLAIN_INSTRUCTION);
+}
+
+/**
  * Get AI usage statistics across all endpoints for a user
- * Useful for analytics and future limit enforcement
+ * Returns comprehensive limit info based on user type (free/pro)
  */
 export async function getAiUsageStats(userId: string): Promise<{
-  mealPlan: {
-    count: number;
-    limit: number;
-    remaining: number;
-    resetsAt: Date | null;
-  };
-  allEndpoints: {
-    [key: string]: number;
-  };
+  mealPlan: UsageLimitCheck & { tokenCost: number };
+  generateRecipe: UsageLimitCheck & { tokenCost: number };
+  replaceRecipe: UsageLimitCheck & { tokenCost: number };
+  parseRecipe: UsageLimitCheck & { tokenCost: number };
+  generateSteps: UsageLimitCheck & { tokenCost: number };
+  parsePantry: UsageLimitCheck & { tokenCost: number };
+  chatInstruction: UsageLimitCheck & { tokenCost: number };
+  explainInstruction: UsageLimitCheck & { tokenCost: number };
 }> {
-  const windowStart = getWindowStartDate();
-
-  // Get meal plan specific stats
-  const mealPlanCheck = await checkMealPlanLimit(userId);
-
-  // Get usage counts for all endpoints
-  const allUsages = await prisma.aiUsage.findMany({
-    where: {
-      userId,
-      createdAt: {
-        gte: windowStart,
-      },
-    },
-    select: {
-      endpoint: true,
-    },
-  });
-
-  // Count by endpoint
-  const allEndpoints: { [key: string]: number } = {};
-  allUsages.forEach((usage) => {
-    allEndpoints[usage.endpoint] = (allEndpoints[usage.endpoint] || 0) + 1;
-  });
+  // Get limits for all endpoints
+  const [
+    mealPlanLimit,
+    generateRecipeLimit,
+    replaceRecipeLimit,
+    parseRecipeLimit,
+    generateStepsLimit,
+    parsePantryLimit,
+    chatInstructionLimit,
+    explainInstructionLimit,
+  ] = await Promise.all([
+    checkMealPlanLimit(userId),
+    checkGenerateRecipeLimit(userId),
+    checkReplaceRecipeLimit(userId),
+    checkParseRecipeLimit(userId),
+    checkGenerateStepsLimit(userId),
+    checkParsePantryLimit(userId),
+    checkChatInstructionLimit(userId),
+    checkExplainInstructionLimit(userId),
+  ]);
 
   return {
-    mealPlan: {
-      count: mealPlanCheck.used,
-      limit: mealPlanCheck.limit,
-      remaining: mealPlanCheck.remaining,
-      resetsAt: mealPlanCheck.resetsAt,
+    mealPlan: { ...mealPlanLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    generateRecipe: { ...generateRecipeLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    replaceRecipe: { ...replaceRecipeLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    parseRecipe: { ...parseRecipeLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    generateSteps: { ...generateStepsLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    parsePantry: { ...parsePantryLimit, tokenCost: MEAL_PLAN_TOKEN_COST },
+    chatInstruction: {
+      ...chatInstructionLimit,
+      tokenCost: MEAL_PLAN_TOKEN_COST,
     },
-    allEndpoints,
+    explainInstruction: {
+      ...explainInstructionLimit,
+      tokenCost: MEAL_PLAN_TOKEN_COST,
+    },
   };
 }
 

@@ -4,7 +4,13 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient, generateHybridRecipe } from "@/lib/ai-utils";
 import { searchRecipeByQuery } from "@/lib/recipe-search-utils";
-import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
+import {
+  trackAiUsage,
+  AiEndpoint,
+  checkGenerateRecipeLimit,
+  validateUserTokens,
+  MEAL_PLAN_TOKEN_COST,
+} from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const generateRecipeRequestSchema = z.object({
@@ -57,6 +63,7 @@ const generateRecipeRequestSchema = z.object({
         .optional(),
     })
     .optional(),
+  tokensToUse: z.number().optional(), // Optional: tokens to use to bypass limit
 });
 
 export async function POST(request: NextRequest) {
@@ -73,6 +80,68 @@ export async function POST(request: NextRequest) {
         { error: "Either prompt or existingRecipe must be provided" },
         { status: 400 }
       );
+    }
+
+    let usedTokens = false;
+
+    // If tokens are provided, validate them instead of checking limit
+    if (payload.tokensToUse !== undefined) {
+      // Validate token amount is correct
+      if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
+        return NextResponse.json(
+          {
+            error: "Invalid token amount",
+            code: "INVALID_TOKEN_AMOUNT",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              provided: payload.tokensToUse,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      // Validate user has enough tokens
+      const tokenValidation = await validateUserTokens(
+        user.id,
+        MEAL_PLAN_TOKEN_COST
+      );
+
+      if (!tokenValidation.valid) {
+        return NextResponse.json(
+          {
+            error: tokenValidation.error || "Insufficient tokens",
+            code: "INSUFFICIENT_TOKENS",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              currentBalance: tokenValidation.currentBalance,
+            },
+          },
+          { status: 402 }
+        );
+      }
+
+      usedTokens = true;
+    } else {
+      // No tokens provided - check normal limit
+      const limitCheck = await checkGenerateRecipeLimit(user.id);
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Recipe generation limit reached",
+            code: "LIMIT_EXCEEDED",
+            details: {
+              limit: limitCheck.limit,
+              used: limitCheck.used,
+              remaining: limitCheck.remaining,
+              resetsAt: limitCheck.resetsAt,
+              isLifetime: limitCheck.resetsAt === null,
+              tokenCost: MEAL_PLAN_TOKEN_COST,
+            },
+          },
+          { status: 429 }
+        );
+      }
     }
 
     const client = getOpenAIClient();
@@ -160,6 +229,8 @@ Return a JSON recipe with the following structure:
           return NextResponse.json({
             recipe: filtered[0],
             source: "database",
+            usedTokens,
+            tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
             message: "Recipe found in database",
           });
         }
@@ -295,7 +366,11 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
     return NextResponse.json({
       recipe,
       source: "ai",
-      message: "Recipe generated with AI",
+      usedTokens,
+      tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
+      message: usedTokens
+        ? "Recipe generated with AI using tokens"
+        : "Recipe generated with AI",
     });
   } catch (error) {
     return handleApiError(error);

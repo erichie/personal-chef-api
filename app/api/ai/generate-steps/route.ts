@@ -4,7 +4,13 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
-import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
+import {
+  trackAiUsage,
+  AiEndpoint,
+  checkGenerateStepsLimit,
+  validateUserTokens,
+  MEAL_PLAN_TOKEN_COST,
+} from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const generateStepsRequestSchema = z.object({
@@ -28,11 +34,11 @@ const generateStepsRequestSchema = z.object({
       ),
     })
     .optional(),
+  tokensToUse: z.number().optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication (user credentials validated but not directly used)
     const { user } = await requireAuth(request);
 
     const body = await request.json();
@@ -44,6 +50,66 @@ export async function POST(request: NextRequest) {
         { error: "Either recipeId or recipe must be provided" },
         { status: 400 }
       );
+    }
+
+    let usedTokens = false;
+
+    // If tokens are provided, validate them instead of checking limit
+    if (payload.tokensToUse !== undefined) {
+      if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
+        return NextResponse.json(
+          {
+            error: "Invalid token amount",
+            code: "INVALID_TOKEN_AMOUNT",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              provided: payload.tokensToUse,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      const tokenValidation = await validateUserTokens(
+        user.id,
+        MEAL_PLAN_TOKEN_COST
+      );
+
+      if (!tokenValidation.valid) {
+        return NextResponse.json(
+          {
+            error: tokenValidation.error || "Insufficient tokens",
+            code: "INSUFFICIENT_TOKENS",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              currentBalance: tokenValidation.currentBalance,
+            },
+          },
+          { status: 402 }
+        );
+      }
+
+      usedTokens = true;
+    } else {
+      // No tokens provided - check normal limit
+      const limitCheck = await checkGenerateStepsLimit(user.id);
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Step generation limit reached",
+            code: "LIMIT_EXCEEDED",
+            details: {
+              limit: limitCheck.limit,
+              used: limitCheck.used,
+              remaining: limitCheck.remaining,
+              resetsAt: limitCheck.resetsAt,
+              isLifetime: limitCheck.resetsAt === null,
+              tokenCost: MEAL_PLAN_TOKEN_COST,
+            },
+          },
+          { status: 429 }
+        );
+      }
     }
 
     let recipeData;
@@ -203,9 +269,15 @@ Please generate clear, step-by-step cooking instructions.`;
       steps: result.steps,
       recipeId: recipeId || null,
       saved: !!recipeId,
+      usedTokens,
+      tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
       message: recipeId
-        ? "Cooking steps generated and saved to recipe"
-        : "Cooking steps generated successfully",
+        ? `Cooking steps generated and saved to recipe${
+            usedTokens ? " using tokens" : ""
+          }`
+        : `Cooking steps generated successfully${
+            usedTokens ? " using tokens" : ""
+          }`,
     });
   } catch (error) {
     return handleApiError(error);

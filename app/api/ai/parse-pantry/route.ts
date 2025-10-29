@@ -3,11 +3,18 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
-import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
+import {
+  trackAiUsage,
+  AiEndpoint,
+  checkParsePantryLimit,
+  validateUserTokens,
+  MEAL_PLAN_TOKEN_COST,
+} from "@/lib/ai-usage-utils";
 
 // Request validation schema
 const parsePantryRequestSchema = z.object({
   transcript: z.string().min(1, "Transcript is required"),
+  tokensToUse: z.number().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,6 +27,66 @@ export async function POST(request: NextRequest) {
     // Handle empty/invalid transcripts
     if (!payload.transcript || payload.transcript.trim().length < 3) {
       return NextResponse.json({ items: [] });
+    }
+
+    let usedTokens = false;
+
+    // If tokens are provided, validate them instead of checking limit
+    if (payload.tokensToUse !== undefined) {
+      if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
+        return NextResponse.json(
+          {
+            error: "Invalid token amount",
+            code: "INVALID_TOKEN_AMOUNT",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              provided: payload.tokensToUse,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      const tokenValidation = await validateUserTokens(
+        user.id,
+        MEAL_PLAN_TOKEN_COST
+      );
+
+      if (!tokenValidation.valid) {
+        return NextResponse.json(
+          {
+            error: tokenValidation.error || "Insufficient tokens",
+            code: "INSUFFICIENT_TOKENS",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              currentBalance: tokenValidation.currentBalance,
+            },
+          },
+          { status: 402 }
+        );
+      }
+
+      usedTokens = true;
+    } else {
+      // No tokens provided - check normal limit
+      const limitCheck = await checkParsePantryLimit(user.id);
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Pantry parsing limit reached",
+            code: "LIMIT_EXCEEDED",
+            details: {
+              limit: limitCheck.limit,
+              used: limitCheck.used,
+              remaining: limitCheck.remaining,
+              resetsAt: limitCheck.resetsAt,
+              isLifetime: limitCheck.resetsAt === null,
+              tokenCost: MEAL_PLAN_TOKEN_COST,
+            },
+          },
+          { status: 429 }
+        );
+      }
     }
 
     const client = getOpenAIClient();
@@ -97,7 +164,11 @@ Example output:
     // Track usage
     await trackAiUsage(user.id, AiEndpoint.PARSE_PANTRY);
 
-    return NextResponse.json({ items: normalizedItems });
+    return NextResponse.json({
+      items: normalizedItems,
+      usedTokens,
+      tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
+    });
   } catch (error) {
     return handleApiError(error);
   }

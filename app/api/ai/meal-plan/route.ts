@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
               used: limitCheck.used,
               remaining: limitCheck.remaining,
               resetsAt: limitCheck.resetsAt,
+              isLifetime: limitCheck.resetsAt === null,
               tokenCost: MEAL_PLAN_TOKEN_COST, // Inform user about token option
             },
           },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
-import { getAiUsageStats, MEAL_PLAN_TOKEN_COST } from "@/lib/ai-usage-utils";
+import { getAiUsageStats } from "@/lib/ai-usage-utils";
 
 /**
  * GET /api/me
@@ -41,7 +41,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Get AI usage statistics
-    const usageStats = await getAiUsageStats(user.id);
+    const limits = await getAiUsageStats(user.id);
+
+    // Format limits based on whether they're unlimited (infinity)
+    const formatLimit = (limit: typeof limits.mealPlan) => {
+      if (limit.limit === Infinity) {
+        return { unlimited: true };
+      }
+      return {
+        used: limit.used,
+        limit: limit.limit,
+        remaining: limit.remaining,
+        isLifetime: limit.resetsAt === null,
+        resetsAt: limit.resetsAt,
+        tokenCost: limit.tokenCost,
+      };
+    };
 
     return NextResponse.json({
       user: {
@@ -58,12 +73,17 @@ export async function GET(request: NextRequest) {
         hasCompletedIntake: !!userData.profile?.chefIntake,
         lastSyncedAt: userData.profile?.lastSyncedAt,
         syncVersion: userData.profile?.syncVersion ?? 0,
-        // AI usage statistics
-        mealPlanUsage: usageStats.mealPlan.count,
-        mealPlanLimit: usageStats.mealPlan.limit,
-        mealPlanRemaining: usageStats.mealPlan.remaining,
-        mealPlanResetsAt: usageStats.mealPlan.resetsAt,
-        mealPlanTokenCost: MEAL_PLAN_TOKEN_COST, // Cost to bypass limit with tokens
+        // AI usage limits per endpoint
+        limits: {
+          mealPlan: formatLimit(limits.mealPlan),
+          generateRecipe: formatLimit(limits.generateRecipe),
+          replaceRecipe: formatLimit(limits.replaceRecipe),
+          parseRecipe: formatLimit(limits.parseRecipe),
+          generateSteps: formatLimit(limits.generateSteps),
+          parsePantry: formatLimit(limits.parsePantry),
+          chatInstruction: formatLimit(limits.chatInstruction),
+          explainInstruction: formatLimit(limits.explainInstruction),
+        },
       },
     });
   } catch (error) {

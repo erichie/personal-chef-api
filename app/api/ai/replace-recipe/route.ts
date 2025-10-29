@@ -9,7 +9,13 @@ import {
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { generateRecipeEmbedding } from "@/lib/embedding-utils";
-import { trackAiUsage, AiEndpoint } from "@/lib/ai-usage-utils";
+import {
+  trackAiUsage,
+  AiEndpoint,
+  checkReplaceRecipeLimit,
+  validateUserTokens,
+  MEAL_PLAN_TOKEN_COST,
+} from "@/lib/ai-usage-utils";
 
 const replaceRecipeRequestSchema = z.object({
   originalRecipe: z.object({
@@ -19,6 +25,7 @@ const replaceRecipeRequestSchema = z.object({
   }),
   replacementReason: z.string(),
   preferences: z.any().optional(),
+  tokensToUse: z.number().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -29,8 +36,65 @@ export async function POST(request: NextRequest) {
     const payload: ReplaceRecipeRequest =
       replaceRecipeRequestSchema.parse(body);
 
-    // TODO: Check user credits/tokens before generating
-    // TODO: Deduct credits after successful generation
+    let usedTokens = false;
+
+    // If tokens are provided, validate them instead of checking limit
+    if (payload.tokensToUse !== undefined) {
+      if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
+        return NextResponse.json(
+          {
+            error: "Invalid token amount",
+            code: "INVALID_TOKEN_AMOUNT",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              provided: payload.tokensToUse,
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      const tokenValidation = await validateUserTokens(
+        user.id,
+        MEAL_PLAN_TOKEN_COST
+      );
+
+      if (!tokenValidation.valid) {
+        return NextResponse.json(
+          {
+            error: tokenValidation.error || "Insufficient tokens",
+            code: "INSUFFICIENT_TOKENS",
+            details: {
+              required: MEAL_PLAN_TOKEN_COST,
+              currentBalance: tokenValidation.currentBalance,
+            },
+          },
+          { status: 402 }
+        );
+      }
+
+      usedTokens = true;
+    } else {
+      // No tokens provided - check normal limit
+      const limitCheck = await checkReplaceRecipeLimit(user.id);
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "Recipe replacement limit reached",
+            code: "LIMIT_EXCEEDED",
+            details: {
+              limit: limitCheck.limit,
+              used: limitCheck.used,
+              remaining: limitCheck.remaining,
+              resetsAt: limitCheck.resetsAt,
+              isLifetime: limitCheck.resetsAt === null,
+              tokenCost: MEAL_PLAN_TOKEN_COST,
+            },
+          },
+          { status: 429 }
+        );
+      }
+    }
 
     // Generate replacement recipe using hybrid approach (database + AI)
     const { recipe: replacementRecipeData, source } =
@@ -103,9 +167,11 @@ export async function POST(request: NextRequest) {
         createdAt: recipe.createdAt,
       },
       recipeSource: source, // "database" or "ai"
+      usedTokens,
+      tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
       message: `Replacement recipe ${
         source === "database" ? "found" : "generated"
-      } successfully`,
+      } successfully${usedTokens ? " using tokens" : ""}`,
     });
   } catch (error) {
     return handleApiError(error);
