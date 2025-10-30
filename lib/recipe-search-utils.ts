@@ -710,3 +710,164 @@ export async function searchRecipeByQuery(
 
   return recipes.filter((r) => r.similarity >= minSimilarity);
 }
+
+/**
+ * Dietary restriction keywords for filtering
+ */
+const MEAT_KEYWORDS = [
+  "chicken",
+  "beef",
+  "pork",
+  "lamb",
+  "turkey",
+  "duck",
+  "veal",
+  "bacon",
+  "sausage",
+  "ham",
+  "steak",
+  "ground meat",
+  "meatball",
+  "meat",
+  "poultry",
+  "prosciutto",
+  "salami",
+  "pepperoni",
+  "chorizo",
+];
+
+const DAIRY_KEYWORDS = [
+  "milk",
+  "cheese",
+  "butter",
+  "cream",
+  "yogurt",
+  "whey",
+  "casein",
+  "lactose",
+  "parmesan",
+  "cheddar",
+  "mozzarella",
+  "ricotta",
+  "feta",
+  "goat cheese",
+  "sour cream",
+  "half and half",
+];
+
+const FISH_KEYWORDS = [
+  "fish",
+  "salmon",
+  "tuna",
+  "cod",
+  "shrimp",
+  "crab",
+  "lobster",
+  "shellfish",
+  "seafood",
+  "anchovy",
+  "tilapia",
+  "halibut",
+  "trout",
+  "mahi mahi",
+  "catfish",
+  "clam",
+  "mussel",
+  "oyster",
+  "scallop",
+  "calamari",
+  "squid",
+];
+
+const EGG_KEYWORDS = ["egg", "eggs", "mayonnaise", "mayo"];
+
+const HONEY_KEYWORDS = ["honey"];
+
+/**
+ * Check if text contains any of the specified keywords
+ */
+function containsAny(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+/**
+ * Check if a recipe meets dietary restrictions
+ */
+export function doesRecipeMeetDietaryRestrictions(
+  recipe: { ingredients?: unknown; tags?: unknown },
+  preferences: {
+    dietStyle?: string;
+    allergies?: string[];
+    exclusions?: string[];
+  }
+): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ingredients = (recipe.ingredients as any[]) || [];
+  const ingredientText = ingredients
+    .map((ing) => `${ing.name || ""} ${ing.notes || ""}`)
+    .join(" ")
+    .toLowerCase();
+
+  // Check diet style
+  if (preferences.dietStyle) {
+    const style = preferences.dietStyle.toLowerCase();
+
+    if (style === "vegan") {
+      if (
+        containsAny(ingredientText, [
+          ...MEAT_KEYWORDS,
+          ...DAIRY_KEYWORDS,
+          ...FISH_KEYWORDS,
+          ...EGG_KEYWORDS,
+          ...HONEY_KEYWORDS,
+        ])
+      ) {
+        return false;
+      }
+    } else if (style === "vegetarian") {
+      if (containsAny(ingredientText, [...MEAT_KEYWORDS, ...FISH_KEYWORDS])) {
+        return false;
+      }
+    } else if (style === "pescatarian") {
+      if (containsAny(ingredientText, MEAT_KEYWORDS)) {
+        return false;
+      }
+    }
+    // Add more diet styles as needed
+  }
+
+  // Check allergies
+  if (preferences.allergies && preferences.allergies.length > 0) {
+    for (const allergen of preferences.allergies) {
+      if (ingredientText.includes(allergen.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+
+  // Check exclusions
+  if (preferences.exclusions && preferences.exclusions.length > 0) {
+    for (const exclusion of preferences.exclusions) {
+      if (ingredientText.includes(exclusion.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Check if user has any dietary restrictions
+ */
+export function hasDietaryRestrictions(preferences: {
+  dietStyle?: string;
+  allergies?: string[];
+  exclusions?: string[];
+}): boolean {
+  return !!(
+    preferences.dietStyle ||
+    (preferences.allergies && preferences.allergies.length > 0) ||
+    (preferences.exclusions && preferences.exclusions.length > 0)
+  );
+}

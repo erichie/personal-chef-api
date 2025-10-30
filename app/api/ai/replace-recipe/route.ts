@@ -153,19 +153,24 @@ export async function POST(request: NextRequest) {
     // Track usage
     await trackAiUsage(user.id, AiEndpoint.REPLACE_RECIPE);
 
+    // Map database source to mobile app expected values
+    // Database stores "generated" but mobile expects "ai", "url", or "manual"
+    const mappedSource =
+      recipe.source === "generated" ? "ai" : recipe.source || "ai";
+
+    // Return recipe fields at root level for mobile app compatibility
     return NextResponse.json({
-      recipe: {
-        id: recipe.id,
-        title: recipe.title,
-        description: recipe.description,
-        servings: recipe.servings,
-        totalMinutes: recipe.totalMinutes,
-        tags: recipe.tags,
-        ingredients: recipe.ingredients,
-        steps: recipe.steps,
-        source: recipe.source,
-        createdAt: recipe.createdAt,
-      },
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      totalMinutes: recipe.totalMinutes,
+      tags: recipe.tags,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+      source: mappedSource,
+      createdAt: recipe.createdAt,
+      // Metadata
       recipeSource: source, // "database" or "ai"
       usedTokens,
       tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,

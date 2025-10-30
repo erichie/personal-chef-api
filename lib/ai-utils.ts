@@ -132,6 +132,13 @@ export interface MealPlanRequest {
       cuisine: string;
       level: "LOVE" | "LIKE" | "NEUTRAL" | "DISLIKE" | "AVOID";
     }>;
+    // New soft preference fields (passed to AI, not used for hard filtering)
+    budget?: string;
+    nutritionGoals?: string[];
+    mealPrepStyle?: string;
+    kitchenEquipment?: string[];
+    favoriteMeals?: string[];
+    flavorPreferences?: string[];
   };
   inventoryItems?: Array<{
     name: string;
@@ -255,6 +262,43 @@ IMPORTANT INVENTORY INSTRUCTIONS:
 ${
   request.preferencesExplanation
     ? `\nSummary: ${request.preferencesExplanation}`
+    : ""
+}
+
+${
+  request.preferences.budget
+    ? `Budget Consideration: ${request.preferences.budget}`
+    : ""
+}
+${
+  request.preferences.nutritionGoals &&
+  request.preferences.nutritionGoals.length > 0
+    ? `Nutrition Goals: ${request.preferences.nutritionGoals.join(", ")}`
+    : ""
+}
+${
+  request.preferences.mealPrepStyle
+    ? `Meal Prep Style: ${request.preferences.mealPrepStyle}`
+    : ""
+}
+${
+  request.preferences.kitchenEquipment &&
+  request.preferences.kitchenEquipment.length > 0
+    ? `Available Kitchen Equipment: ${request.preferences.kitchenEquipment.join(
+        ", "
+      )}`
+    : ""
+}
+${
+  request.preferences.favoriteMeals &&
+  request.preferences.favoriteMeals.length > 0
+    ? `Favorite Meals: ${request.preferences.favoriteMeals.join(", ")}`
+    : ""
+}
+${
+  request.preferences.flavorPreferences &&
+  request.preferences.flavorPreferences.length > 0
+    ? `Flavor Preferences: ${request.preferences.flavorPreferences.join(", ")}`
     : ""
 }
 
@@ -552,6 +596,54 @@ export async function generateHybridMealPlan(
           )}, tags: ${tags?.join(", ") || "none"})`
         );
       });
+    }
+
+    // STEP 4: Apply dietary restrictions filter
+    const { hasDietaryRestrictions, doesRecipeMeetDietaryRestrictions } =
+      await import("./recipe-search-utils");
+
+    if (
+      hasDietaryRestrictions({
+        dietStyle: request.preferences.dietStyle,
+        allergies: request.preferences.allergies,
+        exclusions: request.preferences.exclusions,
+      })
+    ) {
+      console.log("\n🚨 Dietary restrictions detected - filtering recipes...");
+      console.log(`  - Diet style: ${request.preferences.dietStyle || "none"}`);
+      console.log(
+        `  - Allergies: ${request.preferences.allergies?.join(", ") || "none"}`
+      );
+      console.log(
+        `  - Exclusions: ${
+          request.preferences.exclusions?.join(", ") || "none"
+        }`
+      );
+
+      const beforeCount = candidates.length;
+      candidates = candidates.filter((recipe) =>
+        doesRecipeMeetDietaryRestrictions(recipe, {
+          dietStyle: request.preferences.dietStyle,
+          allergies: request.preferences.allergies,
+          exclusions: request.preferences.exclusions,
+        })
+      );
+
+      console.log(
+        `Filtered ${beforeCount} → ${candidates.length} recipes for dietary compliance`
+      );
+
+      // If we don't have enough compliant recipes, adjust targets
+      if (candidates.length < targetDbRecipes) {
+        console.log(
+          `⚠️  Only ${candidates.length} compliant recipes available (needed ${targetDbRecipes})`
+        );
+        console.log(
+          `   Will use ${candidates.length} from DB and generate ${
+            numRecipes - candidates.length
+          } with AI`
+        );
+      }
     }
 
     // Select diverse recipes (avoid duplicates/very similar recipes)

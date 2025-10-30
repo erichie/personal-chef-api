@@ -109,20 +109,20 @@ export async function POST(request: NextRequest) {
     // Track usage
     await trackAiUsage(user.id, AiEndpoint.PARSE_RECIPE);
 
+    // Return recipe fields at root level for mobile app compatibility
     return NextResponse.json({
-      recipe: {
-        id: recipe.id,
-        title: recipe.title,
-        description: recipe.description,
-        servings: recipe.servings,
-        totalMinutes: recipe.totalMinutes,
-        tags: recipe.tags,
-        ingredients: recipe.ingredients,
-        steps: recipe.steps,
-        source: recipe.source,
-        sourceUrl: url,
-        createdAt: recipe.createdAt,
-      },
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      totalMinutes: recipe.totalMinutes,
+      tags: recipe.tags,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+      source: "url", // Mobile app expects "ai", "url", or "manual" - this is from URL
+      sourceUrl: url,
+      createdAt: recipe.createdAt,
+      // Metadata
       usedTokens,
       tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
       message: usedTokens

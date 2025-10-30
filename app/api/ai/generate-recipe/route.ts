@@ -226,9 +226,27 @@ Return a JSON recipe with the following structure:
           // Track usage
           await trackAiUsage(user.id, AiEndpoint.GENERATE_RECIPE);
 
+          // Return recipe fields at root level for mobile app compatibility
+          const dbRecipe = filtered[0];
+
+          // Map database source to mobile app expected values
+          // Database stores "generated" but mobile expects "ai", "url", or "manual"
+          const mappedSource =
+            dbRecipe.source === "generated" ? "ai" : dbRecipe.source || "ai";
+
           return NextResponse.json({
-            recipe: filtered[0],
-            source: "database",
+            id: dbRecipe.id,
+            title: dbRecipe.title,
+            description: dbRecipe.description,
+            servings: dbRecipe.servings,
+            totalMinutes: dbRecipe.totalMinutes,
+            tags: dbRecipe.tags,
+            ingredients: dbRecipe.ingredients,
+            steps: dbRecipe.steps,
+            source: mappedSource,
+            createdAt: dbRecipe.createdAt,
+            // Metadata
+            recipeSource: "database",
             usedTokens,
             tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
             message: "Recipe found in database",
@@ -363,9 +381,18 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
     // Track usage
     await trackAiUsage(user.id, AiEndpoint.GENERATE_RECIPE);
 
+    // Return recipe fields at root level for mobile app compatibility
     return NextResponse.json({
-      recipe,
-      source: "ai",
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      totalMinutes: recipe.totalMinutes,
+      tags: recipe.tags,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+      source: "ai", // Mobile app expects "ai", "url", or "manual"
+      // Metadata
+      recipeSource: "ai",
       usedTokens,
       tokensUsed: usedTokens ? MEAL_PLAN_TOKEN_COST : 0,
       message: usedTokens

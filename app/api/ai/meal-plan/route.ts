@@ -53,6 +53,13 @@ const mealPlanRequestSchema = z.object({
         })
       )
       .optional(),
+    // New soft preference fields (passed to AI, not used for hard filtering)
+    budget: z.string().optional(),
+    nutritionGoals: z.array(z.string()).optional(),
+    mealPrepStyle: z.string().optional(),
+    kitchenEquipment: z.array(z.string()).optional(),
+    favoriteMeals: z.array(z.string()).optional(),
+    flavorPreferences: z.array(z.string()).optional(),
   }),
   inventoryItems: z
     .array(
