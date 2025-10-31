@@ -18,6 +18,7 @@ const createPostSchema = z.object({
       ingredients: z.array(z.any()),
       steps: z.array(z.any()).optional(),
       source: z.string().optional(),
+      sourceUrl: z.string().url().optional(),
     })
     .optional(),
   text: z.string().optional(),
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
             ingredients: data.recipe.ingredients as any,
             steps: (data.recipe.steps || null) as any,
             source: data.recipe.source || "user-post",
+            sourceUrl: data.recipe.sourceUrl || null,
           },
         });
         recipeId = newRecipe.id;

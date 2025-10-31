@@ -122,6 +122,7 @@ model Recipe {
   
   // Metadata
   source       String?  // "generated", "pasted", "meal-plan"
+  sourceUrl    String?  // URL where recipe came from
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   
