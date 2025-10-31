@@ -28,6 +28,63 @@ interface DietaryPreferences {
   exclusions?: string[];
 }
 
+/**
+ * Helper function to fetch random recipes with optional user exclusion
+ */
+async function fetchRandomRecipes(
+  limit: number,
+  excludeUserIds: string[] = []
+): Promise<Recipe[]> {
+  let query: string;
+  let params: any[] = [];
+
+  if (excludeUserIds.length > 0) {
+    const placeholders = excludeUserIds.map((_, i) => `$${i + 1}`).join(", ");
+    query = `
+      SELECT 
+        id,
+        "userId",
+        title,
+        description,
+        servings,
+        "totalMinutes",
+        tags,
+        ingredients,
+        steps,
+        source,
+        "createdAt",
+        "updatedAt"
+      FROM "Recipe"
+      WHERE "userId" NOT IN (${placeholders})
+      ORDER BY RANDOM()
+      LIMIT $${excludeUserIds.length + 1}
+    `;
+    params = [...excludeUserIds, limit];
+  } else {
+    query = `
+      SELECT 
+        id,
+        "userId",
+        title,
+        description,
+        servings,
+        "totalMinutes",
+        tags,
+        ingredients,
+        steps,
+        source,
+        "createdAt",
+        "updatedAt"
+      FROM "Recipe"
+      ORDER BY RANDOM()
+      LIMIT $1
+    `;
+    params = [limit];
+  }
+
+  return prisma.$queryRawUnsafe<Recipe[]>(query, ...params);
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Check if user is authenticated (includes both registered and anonymous users)
@@ -74,9 +131,6 @@ export async function GET(request: NextRequest) {
     // Determine if we need to filter based on preferences
     const needsFiltering = preferences && hasDietaryRestrictions(preferences);
 
-    // Get more recipes if we need to filter (to account for filtered out recipes)
-    const fetchCount = needsFiltering ? count * 4 : count;
-
     console.log("🔍 Needs dietary filtering:", needsFiltering);
     if (needsFiltering && preferences) {
       console.log("🔍 Diet style:", preferences.dietStyle);
@@ -84,77 +138,84 @@ export async function GET(request: NextRequest) {
       console.log("🔍 Exclusions:", preferences.exclusions);
     }
 
-    // Build query to get random recipes
-    // If authenticated, exclude the current user's recipes
-    let query: string;
-    let params: any[] = [];
+    let recipes: Recipe[] = [];
 
-    if (currentUserId) {
-      query = `
-        SELECT 
-          id,
-          "userId",
-          title,
-          description,
-          servings,
-          "totalMinutes",
-          tags,
-          ingredients,
-          steps,
-          source,
-          "createdAt",
-          "updatedAt"
-        FROM "Recipe"
-        WHERE "userId" != $1
-        ORDER BY RANDOM()
-        LIMIT $2
-      `;
-      params = [currentUserId, fetchCount];
-    } else {
-      query = `
-        SELECT 
-          id,
-          "userId",
-          title,
-          description,
-          servings,
-          "totalMinutes",
-          tags,
-          ingredients,
-          steps,
-          source,
-          "createdAt",
-          "updatedAt"
-        FROM "Recipe"
-        ORDER BY RANDOM()
-        LIMIT $1
-      `;
-      params = [fetchCount];
-    }
+    // Strategy: Cascading fallback to ensure we get enough recipes
+    // 1. Try other users' recipes with full dietary restrictions
+    // 2. If not enough, try other users' recipes with just diet style
+    // 3. If still not enough, add user's own recipes with restrictions
+    // 4. If still not enough, add random unfiltered recipes
 
-    let recipes = await prisma.$queryRawUnsafe<Recipe[]>(query, ...params);
-
-    console.log(`📥 Fetched ${recipes.length} random recipes from other users`);
-
-    // Apply dietary filtering if needed
     if (needsFiltering && preferences) {
-      const beforeCount = recipes.length;
-      recipes = recipes.filter((recipe) =>
+      // Step 1: Get other users' recipes with full restrictions
+      console.log(
+        "📍 Step 1: Fetching other users' recipes with full restrictions"
+      );
+      const othersRecipes = await fetchRandomRecipes(
+        count * 4,
+        currentUserId ? [currentUserId] : []
+      );
+      recipes = othersRecipes.filter((recipe) =>
         doesRecipeMeetDietaryRestrictions(recipe, preferences!)
       );
       console.log(
-        `🔍 Filtered from ${beforeCount} to ${recipes.length} recipes based on dietary preferences`
+        `   Found ${recipes.length} recipes from others with full restrictions`
       );
 
-      // If we don't have enough recipes after filtering, log a warning
-      if (recipes.length < count) {
+      // Step 2: If not enough, try with just diet style (more lenient)
+      if (recipes.length < count && preferences.dietStyle) {
         console.log(
-          `⚠️  Only found ${recipes.length} recipes matching preferences (requested ${count})`
+          "📍 Step 2: Not enough recipes, trying with just diet style"
         );
+        const relaxedPreferences = { dietStyle: preferences.dietStyle };
+        const additionalRecipes = othersRecipes.filter((recipe) => {
+          // Don't include recipes we already have
+          if (recipes.find((r) => r.id === recipe.id)) return false;
+          return doesRecipeMeetDietaryRestrictions(recipe, relaxedPreferences);
+        });
+        recipes.push(...additionalRecipes);
         console.log(
-          `⚠️  This may indicate there aren't many recipes from other users matching these dietary restrictions`
+          `   Added ${additionalRecipes.length} more recipes (total: ${recipes.length})`
         );
       }
+
+      // Step 3: If still not enough, include user's own recipes with restrictions
+      if (recipes.length < count && currentUserId) {
+        console.log(
+          "📍 Step 3: Still not enough, including user's own recipes"
+        );
+        const ownRecipes = await fetchRandomRecipes(count * 2, []);
+        const ownFiltered = ownRecipes
+          .filter((recipe) => recipe.userId === currentUserId)
+          .filter((recipe) => {
+            // Don't include recipes we already have
+            if (recipes.find((r) => r.id === recipe.id)) return false;
+            return doesRecipeMeetDietaryRestrictions(recipe, preferences!);
+          });
+        recipes.push(...ownFiltered);
+        console.log(
+          `   Added ${ownFiltered.length} of user's own recipes (total: ${recipes.length})`
+        );
+      }
+
+      // Step 4: If still not enough, add random unfiltered recipes as last resort
+      if (recipes.length < count) {
+        console.log("📍 Step 4: Still not enough, adding unfiltered recipes");
+        const fallbackRecipes = await fetchRandomRecipes(count * 2, []);
+        const additionalUnfiltered = fallbackRecipes.filter(
+          (recipe) => !recipes.find((r) => r.id === recipe.id)
+        );
+        recipes.push(...additionalUnfiltered);
+        console.log(
+          `   Added ${additionalUnfiltered.length} unfiltered recipes (total: ${recipes.length})`
+        );
+      }
+    } else {
+      // No filtering needed, just get random recipes
+      console.log("📍 No filtering needed, fetching random recipes");
+      const excludeUserIds = currentUserId ? [currentUserId] : [];
+      recipes = await fetchRandomRecipes(count, excludeUserIds);
+      console.log(`   Found ${recipes.length} random recipes`);
     }
 
     // Return only the requested count
