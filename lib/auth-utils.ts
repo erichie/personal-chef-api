@@ -258,6 +258,26 @@ export async function requireAuth(request: NextRequest) {
 }
 
 /**
+ * Get authentication if available, but don't throw if not authenticated
+ * Returns null if no valid authentication is present
+ */
+export async function getOptionalAuth(request: NextRequest) {
+  const token = getTokenFromRequest(request);
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const session = await getSessionFromRequest(request);
+    const user = await getUserFromSession(session);
+    return { user, session };
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Clean up expired sessions from the database
  */
 export async function cleanupExpiredSessions() {
