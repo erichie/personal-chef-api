@@ -29,14 +29,22 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
-  profile      UserProfile?
-  sessions     Session[]
-  accounts     Account[]
-  recipes      Recipe[]
-  posts        RecipePost[]
-  postLikes    PostLike[]
-  comments     PostComment[]
-  activities   FeedActivity[]
+  profile           UserProfile?
+  sessions          Session[]
+  accounts          Account[]
+  recipes           Recipe[]
+  posts             RecipePost[]
+  postLikes         PostLike[]
+  comments          PostComment[]
+  activities        FeedActivity[]
+  mealPlans         MealPlan[]
+  mealPlanPosts     MealPlanPost[]
+  mealPlanPostLikes MealPlanPostLike[]
+  mealPlanComments  MealPlanPostComment[]
+  sentShares        MealPlanShare[] @relation("SentShares")
+  receivedShares    MealPlanShare[] @relation("ReceivedShares")
+  sentRecipeShares     RecipeShare[] @relation("SentRecipeShares")
+  receivedRecipeShares RecipeShare[] @relation("ReceivedRecipeShares")
 }
 
 model Session {
@@ -120,6 +128,7 @@ model Recipe {
   // Relations
   posts        RecipePost[]
   usages       RecipeUsage[]
+  shares       RecipeShare[]
   
   @@index([userId])
   @@index([userId, createdAt])
@@ -208,19 +217,20 @@ model PostComment {
 
 // Feed activities - track all friend activities
 model FeedActivity {
-  id           String   @id @default(uuid())
-  userId       String
-  activityType String   // "post", "meal_plan", "recipe_saved", "friend_added"
+  id              String   @id @default(uuid())
+  userId          String
+  activityType    String   // "post", "meal_plan_post", "recipe_saved", "friend_added"
   
   // Polymorphic references (only one will be set)
-  postId       String?
-  recipeId     String?
+  postId          String?
+  recipeId        String?
+  mealPlanPostId  String?
   
   // Activity metadata (stores friendId for friend_added activities)
-  metadata     Json?
-  createdAt    DateTime @default(now())
+  metadata        Json?
+  createdAt       DateTime @default(now())
   
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([userId])
   @@index([createdAt])
@@ -251,5 +261,136 @@ model AiUsage {
   @@index([userId, createdAt])
   @@index([endpoint])
   @@index([userId, endpoint, createdAt])
+}
+
+// Meal plan templates - shareable meal plans (not tied to specific dates)
+model MealPlan {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  
+  // Days array with relative day structure (minimum 1 day)
+  // Each day has meals (breakfast/lunch/dinner) with recipeId references
+  days        Json
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts       MealPlanPost[]
+  shares      MealPlanShare[]
+  
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+// Meal plan posts - posts that reference meal plans
+model MealPlanPost {
+  id          String   @id @default(uuid())
+  userId      String
+  mealPlanId  String
+  
+  // Post content
+  text        String?  // Optional caption/thoughts
+  photoUrl    String?  // Optional photo
+  rating      Int?     // 1-5 stars, optional
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealPlan    MealPlan                @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  likes       MealPlanPostLike[]
+  comments    MealPlanPostComment[]
+  
+  @@index([userId])
+  @@index([mealPlanId])
+  @@index([createdAt])
+}
+
+// Likes on meal plan posts
+model MealPlanPostLike {
+  id        String       @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime     @default(now())
+  
+  post      MealPlanPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// Comments on meal plan posts
+model MealPlanPostComment {
+  id        String       @id @default(uuid())
+  postId    String
+  userId    String
+  text      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  
+  post      MealPlanPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Direct meal plan shares to friends
+model MealPlanShare {
+  id          String   @id @default(uuid())
+  mealPlanId  String
+  senderId    String
+  recipientId String
+  message     String?  // Optional message from sender
+  status      ShareStatus @default(pending)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  mealPlan    MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  sender      User     @relation("SentShares", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("ReceivedShares", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([mealPlanId])
+  @@index([recipientId, status])
+}
+
+// Direct recipe shares to friends
+model RecipeShare {
+  id          String   @id @default(uuid())
+  recipeId    String
+  senderId    String
+  recipientId String
+  message     String?  // Optional message from sender
+  status      ShareStatus @default(pending)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  sender      User     @relation("SentRecipeShares", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("ReceivedRecipeShares", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([recipeId])
+  @@index([recipientId, status])
+}
+
+enum ShareStatus {
+  pending
+  viewed
+  saved
+  declined
 }
 

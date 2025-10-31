@@ -9,9 +9,10 @@ import { v4 as uuidv4 } from "uuid";
  */
 export async function createFeedActivity(data: {
   userId: string;
-  activityType: "post" | "meal_plan" | "recipe_saved" | "friend_added";
+  activityType: "post" | "meal_plan_post" | "recipe_saved" | "friend_added";
   postId?: string;
   recipeId?: string;
+  mealPlanPostId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await prisma.feedActivity.create({
@@ -21,6 +22,7 @@ export async function createFeedActivity(data: {
       activityType: data.activityType,
       postId: data.postId,
       recipeId: data.recipeId,
+      mealPlanPostId: data.mealPlanPostId,
       metadata: (data.metadata || {}) as any,
     },
   });
@@ -49,10 +51,10 @@ export async function getFriendsFeed(
     type === "posts"
       ? ["post"]
       : type === "meals"
-      ? ["meal_plan"]
+      ? ["meal_plan_post"]
       : type === "saves"
       ? ["recipe_saved"]
-      : ["post", "meal_plan", "recipe_saved", "friend_added"];
+      : ["post", "meal_plan_post", "recipe_saved", "friend_added"];
 
   // Build where clause
   const where = {
@@ -112,11 +114,12 @@ export async function getFriendsFeed(
     ? results[results.length - 1].createdAt.toISOString()
     : null;
 
-  // Enrich activities with post and recipe details
+  // Enrich activities with post, meal plan post, and recipe details
   const enrichedActivities = await Promise.all(
     results.map(async (activity) => {
       let post = null;
       let recipe = null;
+      let mealPlanPost = null;
 
       if (activity.postId) {
         post = await prisma.recipePost.findUnique({
@@ -160,6 +163,71 @@ export async function getFriendsFeed(
         }
       }
 
+      if (activity.mealPlanPostId) {
+        const mealPlanPostData = await prisma.mealPlanPost.findUnique({
+          where: { id: activity.mealPlanPostId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                avatarUrl: true,
+                friendCode: true,
+                bio: true,
+              },
+            },
+            mealPlan: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    displayName: true,
+                    email: true,
+                    avatarUrl: true,
+                    friendCode: true,
+                    bio: true,
+                  },
+                },
+              },
+            },
+            likes: {
+              select: {
+                userId: true,
+              },
+            },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        });
+
+        if (mealPlanPostData) {
+          // Enrich meal plan with full recipe data
+          const { enrichMealPlanWithRecipes } = await import(
+            "./meal-plan-utils"
+          );
+          const enrichedMealPlan = await enrichMealPlanWithRecipes(
+            mealPlanPostData.mealPlan as any
+          );
+
+          // Check if current user liked
+          const isLikedByCurrentUser = mealPlanPostData.likes.some(
+            (like) => like.userId === userId
+          );
+
+          mealPlanPost = {
+            ...mealPlanPostData,
+            mealPlan: enrichedMealPlan,
+            likeCount: mealPlanPostData.likes.length,
+            commentCount: mealPlanPostData.comments.length,
+            isLikedByCurrentUser,
+          };
+        }
+      }
+
       if (activity.recipeId) {
         recipe = await prisma.recipe.findUnique({
           where: { id: activity.recipeId },
@@ -172,11 +240,13 @@ export async function getFriendsFeed(
         activityType: activity.activityType,
         postId: activity.postId,
         recipeId: activity.recipeId,
+        mealPlanPostId: activity.mealPlanPostId,
         metadata: activity.metadata as Record<string, unknown>,
         createdAt: activity.createdAt,
         user: activity.user,
         post: post as unknown,
         recipe: recipe as unknown,
+        mealPlanPost: mealPlanPost as unknown,
       } as FeedActivity;
     })
   );
@@ -255,6 +325,7 @@ export async function getUserActivity(
     results.map(async (activity) => {
       let post = null;
       let recipe = null;
+      let mealPlanPost = null;
 
       if (activity.postId) {
         post = await prisma.recipePost.findUnique({
@@ -297,6 +368,70 @@ export async function getUserActivity(
         }
       }
 
+      if (activity.mealPlanPostId) {
+        const mealPlanPostData = await prisma.mealPlanPost.findUnique({
+          where: { id: activity.mealPlanPostId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                avatarUrl: true,
+                friendCode: true,
+                bio: true,
+              },
+            },
+            mealPlan: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    displayName: true,
+                    email: true,
+                    avatarUrl: true,
+                    friendCode: true,
+                    bio: true,
+                  },
+                },
+              },
+            },
+            likes: {
+              select: {
+                userId: true,
+              },
+            },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        });
+
+        if (mealPlanPostData) {
+          // Enrich meal plan with full recipe data
+          const { enrichMealPlanWithRecipes } = await import(
+            "./meal-plan-utils"
+          );
+          const enrichedMealPlan = await enrichMealPlanWithRecipes(
+            mealPlanPostData.mealPlan as any
+          );
+
+          const isLikedByCurrentUser = mealPlanPostData.likes.some(
+            (like) => like.userId === currentUserId
+          );
+
+          mealPlanPost = {
+            ...mealPlanPostData,
+            mealPlan: enrichedMealPlan,
+            likeCount: mealPlanPostData.likes.length,
+            commentCount: mealPlanPostData.comments.length,
+            isLikedByCurrentUser,
+          };
+        }
+      }
+
       if (activity.recipeId) {
         recipe = await prisma.recipe.findUnique({
           where: { id: activity.recipeId },
@@ -309,11 +444,13 @@ export async function getUserActivity(
         activityType: activity.activityType,
         postId: activity.postId,
         recipeId: activity.recipeId,
+        mealPlanPostId: activity.mealPlanPostId,
         metadata: activity.metadata as Record<string, unknown>,
         createdAt: activity.createdAt,
         user: activity.user,
         post: post as unknown,
         recipe: recipe as unknown,
+        mealPlanPost: mealPlanPost as unknown,
       } as FeedActivity;
     })
   );

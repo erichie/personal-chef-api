@@ -393,17 +393,136 @@ export interface PostComment {
 export interface FeedActivity {
   id: string;
   userId: string;
-  activityType: "post" | "meal_plan" | "recipe_saved" | "friend_added";
+  activityType: "post" | "meal_plan_post" | "recipe_saved" | "friend_added";
   postId?: string;
   recipeId?: string;
+  mealPlanPostId?: string;
   metadata?: {
     friendId?: string;
     friendName?: string;
     recipeTitle?: string;
+    mealPlanTitle?: string;
     [key: string]: unknown;
   };
   createdAt: Date;
   user: UserBasic;
   post?: RecipePost;
   recipe?: RecipeBasic;
+  mealPlanPost?: MealPlanPost;
+}
+
+// ==================== Meal Plan Sharing Types ====================
+
+// Template meal structure (without dates or tracking)
+export interface TemplateMeal {
+  recipeId: string;
+  title: string;
+  description?: string;
+  servings?: number;
+  totalMinutes?: number;
+}
+
+export interface TemplateDayMeals {
+  breakfast?: TemplateMeal;
+  lunch?: TemplateMeal;
+  dinner?: TemplateMeal;
+}
+
+export interface TemplateMealPlanDay {
+  dayNumber: number; // 0, 1, 2, etc. (relative days)
+  meals: TemplateDayMeals;
+}
+
+// Meal plan template stored in database
+export interface MealPlan {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  days: TemplateMealPlanDay[]; // Minimum 1 day
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+}
+
+// Enriched meal plan with full recipe data
+export interface MealPlanWithRecipes extends MealPlan {
+  recipes: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    servings?: number;
+    totalMinutes?: number;
+    tags?: string[];
+    ingredients: IngredientJSON[];
+    steps?: StepJSON[];
+  }>;
+}
+
+// Meal plan post
+export interface MealPlanPost {
+  id: string;
+  userId: string;
+  mealPlanId: string;
+  text?: string;
+  photoUrl?: string;
+  rating?: number;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+  mealPlan?: MealPlanWithRecipes;
+  likeCount?: number;
+  commentCount?: number;
+  isLikedByCurrentUser?: boolean;
+  comments?: MealPlanPostComment[];
+}
+
+// Meal plan post comment
+export interface MealPlanPostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  text: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+}
+
+// Meal plan share
+export interface MealPlanShare {
+  id: string;
+  mealPlanId: string;
+  senderId: string;
+  recipientId: string;
+  message?: string;
+  status: "pending" | "viewed" | "saved" | "declined";
+  createdAt: Date;
+  updatedAt: Date;
+  mealPlan?: MealPlanWithRecipes;
+  sender?: UserBasic;
+  recipient?: UserBasic;
+}
+
+// Recipe share
+export interface RecipeShare {
+  id: string;
+  recipeId: string;
+  senderId: string;
+  recipientId: string;
+  message?: string;
+  status: "pending" | "viewed" | "saved" | "declined";
+  createdAt: Date;
+  updatedAt: Date;
+  recipe?: {
+    id: string;
+    title: string;
+    description?: string;
+    servings?: number;
+    totalMinutes?: number;
+    tags?: string[];
+    ingredients: IngredientJSON[];
+    steps?: StepJSON[];
+  };
+  sender?: UserBasic;
+  recipient?: UserBasic;
 }
