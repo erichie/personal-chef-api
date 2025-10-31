@@ -30,7 +30,7 @@ interface DietaryPreferences {
 
 export async function GET(request: NextRequest) {
   try {
-    // Check if user is authenticated (optional)
+    // Check if user is authenticated (includes both registered and anonymous users)
     const auth = await getOptionalAuth(request);
     const currentUserId = auth?.user?.id;
 
@@ -46,10 +46,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log("🔍 Recipe Discovery - User ID:", currentUserId || "anonymous");
+    console.log(
+      "🔍 Recipe Discovery - User ID:",
+      currentUserId || "not authenticated"
+    );
     console.log("🔍 Recipe Discovery - Count:", count);
 
-    // Fetch user preferences if authenticated
+    // Fetch user preferences for both registered and anonymous users
     let preferences: DietaryPreferences | null = null;
     if (currentUserId) {
       const profile = await prisma.userProfile.findUnique({
@@ -131,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     let recipes = await prisma.$queryRawUnsafe<Recipe[]>(query, ...params);
 
-    console.log(`📥 Fetched ${recipes.length} random recipes`);
+    console.log(`📥 Fetched ${recipes.length} random recipes from other users`);
 
     // Apply dietary filtering if needed
     if (needsFiltering && preferences) {
@@ -142,6 +145,16 @@ export async function GET(request: NextRequest) {
       console.log(
         `🔍 Filtered from ${beforeCount} to ${recipes.length} recipes based on dietary preferences`
       );
+
+      // If we don't have enough recipes after filtering, log a warning
+      if (recipes.length < count) {
+        console.log(
+          `⚠️  Only found ${recipes.length} recipes matching preferences (requested ${count})`
+        );
+        console.log(
+          `⚠️  This may indicate there aren't many recipes from other users matching these dietary restrictions`
+        );
+      }
     }
 
     // Return only the requested count
