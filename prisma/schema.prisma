@@ -45,6 +45,7 @@ model User {
   receivedShares    MealPlanShare[] @relation("ReceivedShares")
   sentRecipeShares     RecipeShare[] @relation("SentRecipeShares")
   receivedRecipeShares RecipeShare[] @relation("ReceivedRecipeShares")
+  recipeVotes       RecipeVote[]
 }
 
 model Session {
@@ -130,6 +131,7 @@ model Recipe {
   posts        RecipePost[]
   usages       RecipeUsage[]
   shares       RecipeShare[]
+  votes        RecipeVote[]
   
   @@index([userId])
   @@index([userId, createdAt])
@@ -388,10 +390,34 @@ model RecipeShare {
   @@index([recipientId, status])
 }
 
+// Recipe votes for upvoting/downvoting recipes
+model RecipeVote {
+  id        String   @id @default(uuid())
+  recipeId  String
+  userId    String
+  voteType  VoteType
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([recipeId, userId])
+  @@index([recipeId])
+  @@index([userId])
+  @@index([voteType])
+}
+
 enum ShareStatus {
   pending
   viewed
   saved
   declined
+}
+
+enum VoteType {
+  upvote
+  downvote
 }
 

@@ -20,6 +20,9 @@ interface Recipe {
   source: string | null;
   createdAt: Date;
   updatedAt: Date;
+  upvotes?: number;
+  downvotes?: number;
+  score?: number;
 }
 
 interface DietaryPreferences {
@@ -42,41 +45,61 @@ async function fetchRandomRecipes(
     const placeholders = excludeUserIds.map((_, i) => `$${i + 1}`).join(", ");
     query = `
       SELECT 
-        id,
-        "userId",
-        title,
-        description,
-        servings,
-        "totalMinutes",
-        tags,
-        ingredients,
-        steps,
-        source,
-        "createdAt",
-        "updatedAt"
-      FROM "Recipe"
-      WHERE "userId" NOT IN (${placeholders})
-      ORDER BY RANDOM()
+        r.id,
+        r."userId",
+        r.title,
+        r.description,
+        r.servings,
+        r."totalMinutes",
+        r.tags,
+        r.ingredients,
+        r.steps,
+        r.source,
+        r."createdAt",
+        r."updatedAt",
+        COALESCE(SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END), 0)::int AS upvotes,
+        COALESCE(SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 0)::int AS downvotes,
+        COALESCE(
+          SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END) - 
+          SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 
+          0
+        )::int AS score
+      FROM "Recipe" r
+      LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
+      WHERE r."userId" NOT IN (${placeholders})
+      GROUP BY r.id, r."userId", r.title, r.description, r.servings, r."totalMinutes", 
+               r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+      ORDER BY score DESC, r."createdAt" DESC
       LIMIT $${excludeUserIds.length + 1}
     `;
     params = [...excludeUserIds, limit];
   } else {
     query = `
       SELECT 
-        id,
-        "userId",
-        title,
-        description,
-        servings,
-        "totalMinutes",
-        tags,
-        ingredients,
-        steps,
-        source,
-        "createdAt",
-        "updatedAt"
-      FROM "Recipe"
-      ORDER BY RANDOM()
+        r.id,
+        r."userId",
+        r.title,
+        r.description,
+        r.servings,
+        r."totalMinutes",
+        r.tags,
+        r.ingredients,
+        r.steps,
+        r.source,
+        r."createdAt",
+        r."updatedAt",
+        COALESCE(SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END), 0)::int AS upvotes,
+        COALESCE(SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 0)::int AS downvotes,
+        COALESCE(
+          SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END) - 
+          SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 
+          0
+        )::int AS score
+      FROM "Recipe" r
+      LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
+      GROUP BY r.id, r."userId", r.title, r.description, r.servings, r."totalMinutes", 
+               r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+      ORDER BY score DESC, r."createdAt" DESC
       LIMIT $1
     `;
     params = [limit];

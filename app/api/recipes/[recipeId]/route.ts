@@ -3,6 +3,7 @@ import { getOptionalAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
 import { errors } from "@/lib/api-errors";
+import { getRecipeVoteStatsWithUserVote } from "@/lib/recipe-utils";
 
 export async function GET(
   request: NextRequest,
@@ -32,9 +33,19 @@ export async function GET(
       throw errors.notFound("Recipe not found");
     }
 
-    console.log("✅ Recipe found:", recipe.title);
+    // Get vote statistics
+    const voteStats = await getRecipeVoteStatsWithUserVote(
+      recipeId,
+      auth?.user?.id || null
+    );
 
-    return NextResponse.json({ recipe });
+    console.log("✅ Recipe found:", recipe.title);
+    console.log("✅ Vote stats:", voteStats);
+
+    return NextResponse.json({
+      recipe,
+      votes: voteStats,
+    });
   } catch (error) {
     console.error("❌ Get Recipe Error:", error);
     return handleApiError(error);
