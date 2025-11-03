@@ -109,6 +109,7 @@ export async function enrichMealPlanWithRecipes(
       id: true,
       title: true,
       description: true,
+      imageUrl: true,
       servings: true,
       totalMinutes: true,
       tags: true,

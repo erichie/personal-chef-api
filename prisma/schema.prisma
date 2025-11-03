@@ -111,6 +111,7 @@ model Recipe {
   // Recipe details
   title        String
   description  String?
+  imageUrl     String?  // URL to recipe image
   servings     Int?
   totalMinutes Int?
   tags         Json?    // Array of strings

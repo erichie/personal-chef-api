@@ -1005,10 +1005,15 @@ When parsing recipes:
 5. Calculate or extract total cooking time (prep + cook)
 6. Identify relevant tags/categories (cuisine type, meal type, dietary info)
 7. Extract the recipe description or summary
+8. Extract the recipe image URL if available from:
+   - Open Graph meta tags (og:image)
+   - Recipe schema.org markup (image property)
+   - Featured image or main recipe photo
 
 Return the parsed recipe in JSON format with:
 - title (string)
 - description (string, if available)
+- imageUrl (string, URL to recipe image if available)
 - servings (number, if available)
 - totalMinutes (number, total time in minutes if available)
 - tags (array of strings for categorization)

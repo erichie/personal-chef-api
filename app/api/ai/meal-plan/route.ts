@@ -213,6 +213,7 @@ export async function POST(request: NextRequest) {
                       userId: user.id,
                       title: meal.title,
                       description: meal.description || null,
+                      imageUrl: null, // AI-generated recipes have null imageUrl
                       servings: meal.servings || null,
                       totalMinutes: meal.totalMinutes || null,
                       tags: meal.tags || null,
@@ -269,6 +270,7 @@ export async function POST(request: NextRequest) {
         id: r.id,
         title: r.title,
         description: r.description,
+        imageUrl: r.imageUrl,
         servings: r.servings,
         totalMinutes: r.totalMinutes,
       })),

@@ -322,6 +322,7 @@ export interface UserBackup {
     id: string;
     title: string;
     description?: string;
+    imageUrl?: string;
     servings?: number;
     totalMinutes?: number;
     tags?: string[];
@@ -375,6 +376,7 @@ export interface RecipeBasic {
   id: string;
   title: string;
   description?: string;
+  imageUrl?: string;
   servings?: number;
   totalMinutes?: number;
   tags?: string[];
@@ -451,6 +453,7 @@ export interface MealPlanWithRecipes extends MealPlan {
     id: string;
     title: string;
     description?: string;
+    imageUrl?: string;
     servings?: number;
     totalMinutes?: number;
     tags?: string[];
@@ -517,6 +520,7 @@ export interface RecipeShare {
     id: string;
     title: string;
     description?: string;
+    imageUrl?: string;
     servings?: number;
     totalMinutes?: number;
     tags?: string[];

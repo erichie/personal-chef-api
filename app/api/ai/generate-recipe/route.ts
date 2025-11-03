@@ -238,6 +238,7 @@ Return a JSON recipe with the following structure:
             id: dbRecipe.id,
             title: dbRecipe.title,
             description: dbRecipe.description,
+            imageUrl: dbRecipe.imageUrl,
             servings: dbRecipe.servings,
             totalMinutes: dbRecipe.totalMinutes,
             tags: dbRecipe.tags,
@@ -385,6 +386,7 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
     return NextResponse.json({
       title: recipe.title,
       description: recipe.description,
+      imageUrl: recipe.imageUrl || null,
       servings: recipe.servings,
       totalMinutes: recipe.totalMinutes,
       tags: recipe.tags,

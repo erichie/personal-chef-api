@@ -12,6 +12,7 @@ export interface RecipeWithSimilarity {
   userId: string;
   title: string;
   description: string | null;
+  imageUrl: string | null;
   servings: number | null;
   totalMinutes: number | null;
   tags: unknown;
@@ -97,6 +98,7 @@ export async function searchRecipesByPreferences(
       "userId",
       title,
       description,
+      "imageUrl",
       servings,
       "totalMinutes",
       tags,
@@ -686,6 +688,7 @@ export async function searchRecipeByQuery(
       "userId",
       title,
       description,
+      "imageUrl",
       servings,
       "totalMinutes",
       tags,

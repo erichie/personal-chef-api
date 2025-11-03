@@ -163,6 +163,7 @@ export async function POST(request: NextRequest) {
       id: recipe.id,
       title: recipe.title,
       description: recipe.description,
+      imageUrl: recipe.imageUrl,
       servings: recipe.servings,
       totalMinutes: recipe.totalMinutes,
       tags: recipe.tags,

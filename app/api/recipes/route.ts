@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 const createRecipeSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
+  imageUrl: z.string().url().optional(),
   servings: z.number().positive().optional(),
   totalMinutes: z.number().positive().optional(),
   tags: z.array(z.string()).optional(),
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         title: data.title,
         description: data.description || null,
+        imageUrl: data.imageUrl || null,
         servings: data.servings || null,
         totalMinutes: data.totalMinutes || null,
         tags: (data.tags || null) as any,
