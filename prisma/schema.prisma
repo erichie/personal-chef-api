@@ -114,6 +114,7 @@ model Recipe {
   imageUrl     String?  // URL to recipe image
   servings     Int?
   totalMinutes Int?
+  cuisine      String   @default("OTHER") // Cuisine type (e.g., "Italian", "Mexican", "Japanese")
   tags         Json?    // Array of strings
   ingredients  Json     // Array of IngredientJSON objects
   steps        Json?    // Array of StepJSON objects

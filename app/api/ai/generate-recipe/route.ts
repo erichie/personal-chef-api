@@ -154,13 +154,16 @@ export async function POST(request: NextRequest) {
       systemPrompt = `You are a professional chef refining recipes. 
 Improve the following recipe while maintaining its core identity.
 Make ingredients more precise, improve instructions, add missing steps, and enhance the overall quality.
+Detect and set the cuisine type based on the recipe's characteristics.
+Recipe titles should NOT include the cuisine type.
 
 Return a JSON recipe with the following structure:
 {
-  "title": "Recipe Title",
+  "title": "Recipe Title (without cuisine type)",
   "description": "Brief description",
   "servings": 4,
   "totalMinutes": 45,
+  "cuisine": "Italian",
   "tags": ["tag1", "tag2"],
   "ingredients": [
     {
@@ -241,9 +244,10 @@ Return a JSON recipe with the following structure:
             imageUrl: dbRecipe.imageUrl,
             servings: dbRecipe.servings,
             totalMinutes: dbRecipe.totalMinutes,
+            cuisine: dbRecipe.cuisine,
             tags: dbRecipe.tags,
             ingredients: dbRecipe.ingredients,
-            steps: dbRecipe.steps,
+            steps: dbRecipe.steps || [],
             source: mappedSource,
             createdAt: dbRecipe.createdAt,
             // Metadata
@@ -263,6 +267,8 @@ Return a JSON recipe with the following structure:
 
       systemPrompt = `You are a professional chef creating personalized recipes. 
 Generate a complete recipe based on the user's request and preferences.
+Detect and set the cuisine type based on the recipe's characteristics.
+Recipe titles should NOT include the cuisine type.
 
 ${
   prefs.householdSize
@@ -298,10 +304,11 @@ ${prefs.cuisinePreferences.map((c) => `- ${c.cuisine}: ${c.level}`).join("\n")}`
 
 Return a JSON recipe with the following structure:
 {
-  "title": "Recipe Title",
+  "title": "Recipe Title (without cuisine type)",
   "description": "Brief description",
   "servings": ${prefs.householdSize || 4},
   "totalMinutes": 45,
+  "cuisine": "Italian",
   "tags": ["tag1", "tag2"],
   "ingredients": [
     {
@@ -389,9 +396,10 @@ Make sure the recipe is practical, delicious, and matches all the user's prefere
       imageUrl: recipe.imageUrl || null,
       servings: recipe.servings,
       totalMinutes: recipe.totalMinutes,
+      cuisine: recipe.cuisine || "Other",
       tags: recipe.tags,
       ingredients: recipe.ingredients,
-      steps: recipe.steps,
+      steps: recipe.steps || [],
       source: "ai", // Mobile app expects "ai", "url", or "manual"
       // Metadata
       recipeSource: "ai",

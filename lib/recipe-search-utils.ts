@@ -15,6 +15,7 @@ export interface RecipeWithSimilarity {
   imageUrl: string | null;
   servings: number | null;
   totalMinutes: number | null;
+  cuisine: string;
   tags: unknown;
   ingredients: unknown;
   steps: unknown;
@@ -101,6 +102,7 @@ export async function searchRecipesByPreferences(
       "imageUrl",
       servings,
       "totalMinutes",
+      cuisine,
       tags,
       ingredients,
       steps,
@@ -582,6 +584,7 @@ export async function searchRecipesByTags(
       description,
       servings,
       "totalMinutes",
+      cuisine,
       tags,
       ingredients,
       steps,
@@ -629,6 +632,7 @@ export async function getRandomRecipes(
       description,
       servings,
       "totalMinutes",
+      cuisine,
       tags,
       ingredients,
       steps,
@@ -691,6 +695,7 @@ export async function searchRecipeByQuery(
       "imageUrl",
       servings,
       "totalMinutes",
+      cuisine,
       tags,
       ingredients,
       steps,

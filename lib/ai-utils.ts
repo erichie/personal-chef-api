@@ -36,6 +36,9 @@ When creating meal plans:
 8. When appropriate, include complementary side dishes with entrees (e.g., rice with curry, roasted vegetables with protein, salad with pasta)
 9. Side dishes should be simple, quick to prepare, and enhance the main dish
 10. Only include sides when they naturally complement the meal and fit within time/skill constraints
+11. Detect and set the cuisine type for each recipe based on its ingredients, cooking techniques, and flavor profile
+12. Recipe titles should NOT include the cuisine type (e.g., "Carbonara" not "Italian Carbonara", "Pad Thai" not "Thai Pad Thai")
+13. CRITICAL: Each recipe in the meal plan MUST be completely unique - no duplicate or repeated recipes within the same meal plan
 
 CRITICAL INVENTORY RULES:
 - ALWAYS include the COMPLETE list of ingredients for each recipe
@@ -51,10 +54,11 @@ Return meal plans in a structured JSON format with:
 - days array with date and meals (breakfast, lunch, dinner)
 - Each meal MUST include:
   - id (unique identifier)
-  - title (recipe name - include sides in title if applicable, e.g., "Grilled Chicken with Roasted Vegetables")
+  - title (recipe name WITHOUT cuisine type - include sides in title if applicable, e.g., "Grilled Chicken with Roasted Vegetables")
   - description (brief description mentioning both main and sides)
   - servings (number of servings)
   - totalMinutes (total cooking time including sides)
+  - cuisine (string, REQUIRED - the cuisine type such as "Italian", "Mexican", "Japanese", "Chinese", "Thai", "Indian", "Mediterranean", "Korean", "American", "French", "Middle Eastern", "Caribbean", or "Other")
   - tags (array of relevant tags)
   - ingredients (array of objects with EXACT structure - include ALL ingredients for main dish AND sides):
     * name (string, the ingredient name as displayed)
@@ -93,9 +97,12 @@ When replacing recipes:
 5. Maintain or improve upon the original recipe's appeal
 6. Provide clear, detailed instructions
 7. List all ingredients with quantities
+8. Detect and set the cuisine type based on ingredients and cooking techniques
+9. Recipe titles should NOT include the cuisine type (e.g., "Tacos" not "Mexican Tacos")
 
 Return the replacement recipe in JSON format with:
-- title, description, servings, totalMinutes
+- title (WITHOUT cuisine type), description, servings, totalMinutes
+- cuisine (string, REQUIRED - the cuisine type such as "Italian", "Mexican", "Japanese", "Chinese", "Thai", "Indian", "Mediterranean", "Korean", "American", "French", "Middle Eastern", "Caribbean", or "Other")
 - ingredients array with EXACT structure:
   * name (string, the ingredient name as displayed)
   * qty (number, optional - quantity if specified)
@@ -697,94 +704,78 @@ export async function generateHybridMealPlan(
   // PHASE 3: Combine and finalize
   const allRecipes = [...dbRecipes, ...aiGeneratedRecipes];
 
-  // DUPLICATE DETECTION TEMPORARILY DISABLED FOR TESTING
-  // The AI is instructed to avoid duplicates, so let's test if that's sufficient
-  // Uncomment this section if AI generates too many similar recipes
+  // Deduplicate recipes within the same meal plan
+  const finalRecipes: RecipeWithSimilarity[] = [];
+  const seenTitles = new Set<string>();
 
-  // First pass: deduplicate
-  // let finalRecipes: RecipeWithSimilarity[] = [];
-  // let seenRecipes: Array<{ title: string; ingredients: unknown }> = [];
-  // for (const recipe of allRecipes) {
-  //   const ingredients = recipe.ingredients || [];
-  //   if (!isDuplicateRecipe(recipe.title, ingredients, seenRecipes)) {
-  //     finalRecipes.push(recipe);
-  //     seenRecipes.push({ title: recipe.title, ingredients });
-  //   } else {
-  //     console.log(`Skipping duplicate recipe: ${recipe.title}`);
-  //   }
-  // }
+  for (const recipe of allRecipes) {
+    const normalizedTitle = recipe.title.toLowerCase().trim();
 
-  // Without duplicate detection, just use all recipes
-  const finalRecipes: RecipeWithSimilarity[] = allRecipes;
+    if (!seenTitles.has(normalizedTitle)) {
+      finalRecipes.push(recipe);
+      seenTitles.add(normalizedTitle);
+    } else {
+      console.log(
+        `⚠️  Skipping duplicate recipe in meal plan: ${recipe.title}`
+      );
+    }
+  }
 
-  // REGENERATION LOGIC ALSO DISABLED FOR TESTING
   // If we filtered out duplicates and don't have enough, generate more
-  // if (finalRecipes.length < numRecipes) {
-  //   const stillNeeded = numRecipes - finalRecipes.length;
-  //   console.log(
-  //     `Need ${stillNeeded} more recipes after deduplication, generating...`
-  //   );
+  if (finalRecipes.length < numRecipes) {
+    const stillNeeded = numRecipes - finalRecipes.length;
+    console.log(
+      `⚠️  Need ${stillNeeded} more recipes after deduplication, generating additional recipes...`
+    );
 
-  //   // Get titles of recipes we already have to avoid in new generation
-  //   const existingTitles = finalRecipes.map((r) => r.title);
+    // Generate additional recipes to fill the gap
+    const additionalRequest = {
+      ...request,
+      numRecipes: stillNeeded,
+    };
 
-  //   // Generate additional recipes to fill the gap
-  //   const additionalRequest = {
-  //     ...request,
-  //     numRecipes: stillNeeded,
-  //   };
+    try {
+      const additionalMealPlan = await generateMealPlan(additionalRequest);
 
-  //   try {
-  //     const additionalMealPlan = await generateMealPlan(additionalRequest);
+      // Extract recipes from the additional generation
+      if (additionalMealPlan.days && Array.isArray(additionalMealPlan.days)) {
+        for (const day of additionalMealPlan.days) {
+          if (day.meals) {
+            const mealTypes = ["breakfast", "lunch", "dinner"];
+            for (const mealType of mealTypes) {
+              const meal = day.meals[mealType];
+              if (meal && meal.title) {
+                const normalizedTitle = meal.title.toLowerCase().trim();
 
-  //     // Extract recipes from the additional generation
-  //     if (additionalMealPlan.days && Array.isArray(additionalMealPlan.days)) {
-  //       for (const day of additionalMealPlan.days) {
-  //         if (day.meals) {
-  //           const mealTypes = ["breakfast", "lunch", "dinner"];
-  //           for (const mealType of mealTypes) {
-  //             const meal = day.meals[mealType];
-  //             if (meal && meal.title) {
-  //               // Check if this new recipe is also a duplicate
-  //               if (
-  //                 !isDuplicateRecipe(
-  //                   meal.title,
-  //                   meal.ingredients || [],
-  //                   seenRecipes
-  //                 )
-  //               ) {
-  //                 finalRecipes.push(meal);
-  //                 seenRecipes.push({
-  //                   title: meal.title,
-  //                   ingredients: meal.ingredients,
-  //                 });
+                // Check if this new recipe is also a duplicate
+                if (!seenTitles.has(normalizedTitle)) {
+                  finalRecipes.push(meal as RecipeWithSimilarity);
+                  seenTitles.add(normalizedTitle);
 
-  //                 // Stop once we have enough
-  //                 if (finalRecipes.length >= numRecipes) {
-  //                   break;
-  //                 }
-  //               } else {
-  //                 console.log(
-  //                   `Additional recipe also duplicate: ${meal.title}`
-  //                 );
-  //               }
-  //             }
-  //           }
-  //           if (finalRecipes.length >= numRecipes) break;
-  //         }
-  //       }
-  //     }
+                  // Stop once we have enough
+                  if (finalRecipes.length >= numRecipes) {
+                    break;
+                  }
+                } else {
+                  console.log(
+                    `⚠️  Additional recipe also duplicate: ${meal.title}`
+                  );
+                }
+              }
+            }
+            if (finalRecipes.length >= numRecipes) break;
+          }
+        }
+      }
 
-  //     console.log(
-  //       `Generated ${
-  //         finalRecipes.length - (numRecipes - stillNeeded)
-  //       } additional recipes`
-  //     );
-  //   } catch (error) {
-  //     console.error("Failed to generate additional recipes:", error);
-  //     // Continue with what we have
-  //   }
-  // }
+      console.log(
+        `✓ Generated ${stillNeeded} additional recipes (total: ${finalRecipes.length})`
+      );
+    } catch (error) {
+      console.error("❌ Failed to generate additional recipes:", error);
+      // Continue with what we have
+    }
+  }
 
   // Build final meal plan structure
   console.log(
@@ -998,24 +989,26 @@ export async function generateHybridRecipe(
 export const PARSE_RECIPE_SYSTEM_PROMPT = `You are an expert at extracting and parsing recipe information from web pages. Your role is to accurately extract structured recipe data from HTML content.
 
 When parsing recipes:
-1. Extract the recipe title accurately
+1. Extract the recipe title accurately (without cuisine type prefix)
 2. Identify all ingredients with their quantities and units
 3. Extract step-by-step instructions in order
 4. Determine serving size if mentioned
 5. Calculate or extract total cooking time (prep + cook)
 6. Identify relevant tags/categories (cuisine type, meal type, dietary info)
-7. Extract the recipe description or summary
-8. Extract the recipe image URL if available from:
+7. Detect the cuisine type based on ingredients, techniques, and recipe context
+8. Extract the recipe description or summary
+9. Extract the recipe image URL if available from:
    - Open Graph meta tags (og:image)
    - Recipe schema.org markup (image property)
    - Featured image or main recipe photo
 
 Return the parsed recipe in JSON format with:
-- title (string)
+- title (string, WITHOUT cuisine type prefix)
 - description (string, if available)
 - imageUrl (string, URL to recipe image if available)
 - servings (number, if available)
 - totalMinutes (number, total time in minutes if available)
+- cuisine (string, REQUIRED - detected cuisine type such as "Italian", "Mexican", "Japanese", "Chinese", "Thai", "Indian", "Mediterranean", "Korean", "American", "French", "Middle Eastern", "Caribbean", or "Other" if unclear)
 - tags (array of strings for categorization)
 - ingredients (array of objects with EXACT structure):
   * name (string, the ingredient name as displayed)

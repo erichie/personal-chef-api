@@ -15,6 +15,7 @@ export async function shareRecipeToFriend(data: {
     description?: string;
     servings?: number;
     totalMinutes?: number;
+    cuisine?: string;
     tags?: string[];
     ingredients: any[];
     steps?: any[];
@@ -65,6 +66,7 @@ export async function shareRecipeToFriend(data: {
           description: data.recipe.description || null,
           servings: data.recipe.servings || null,
           totalMinutes: data.recipe.totalMinutes || null,
+          cuisine: data.recipe.cuisine || "Other",
           tags: (data.recipe.tags || null) as any,
           ingredients: data.recipe.ingredients as any,
           steps: (data.recipe.steps || null) as any,

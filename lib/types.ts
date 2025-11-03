@@ -379,6 +379,7 @@ export interface RecipeBasic {
   imageUrl?: string;
   servings?: number;
   totalMinutes?: number;
+  cuisine?: string;
   tags?: string[];
 }
 

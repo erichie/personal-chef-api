@@ -151,7 +151,8 @@ export async function POST(request: NextRequest) {
     const mealPlanData = hybridResult.mealPlan;
 
     // Extract recipes from meal plan and store them
-    const recipes = [];
+    const aiGeneratedRecipes = [];
+    const databaseRecipes = [];
     const recipeIdMap = new Map<string, string>(); // Map meal title to recipe ID
     const recipeIdsUsed: string[] = [];
 
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest) {
                   where: { id: recipeId },
                 });
                 if (existingRecipe) {
-                  recipes.push(existingRecipe);
+                  databaseRecipes.push(existingRecipe);
                 }
               } else {
                 // This is a new AI-generated recipe - store it
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
                       imageUrl: null, // AI-generated recipes have null imageUrl
                       servings: meal.servings || null,
                       totalMinutes: meal.totalMinutes || null,
+                      cuisine: meal.cuisine || "Other",
                       tags: meal.tags || null,
                       ingredients: meal.ingredients || [],
                       steps: meal.steps || null,
@@ -233,11 +235,11 @@ export async function POST(request: NextRequest) {
                     );
                   }
 
-                  recipes.push(recipe);
+                  aiGeneratedRecipes.push(recipe);
                   recipeIdsUsed.push(recipeId);
                 } else {
                   recipeId = existingRecipe.id;
-                  recipes.push(existingRecipe);
+                  aiGeneratedRecipes.push(existingRecipe);
                   recipeIdsUsed.push(recipeId);
                 }
               }
@@ -250,6 +252,10 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // Combine recipes: AI-generated first, then database recipes at the end
+    // This ordering makes it easier for the mobile app to display new recipes prominently
+    const recipes = [...aiGeneratedRecipes, ...databaseRecipes];
 
     // Record recipe usage for tracking
     await recordRecipeUsage(user.id, recipeIdsUsed);

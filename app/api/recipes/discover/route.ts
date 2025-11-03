@@ -15,6 +15,7 @@ interface Recipe {
   imageUrl: string | null;
   servings: number | null;
   totalMinutes: number | null;
+  cuisine: string;
   tags: unknown;
   ingredients: unknown;
   steps: unknown;
@@ -53,6 +54,7 @@ async function fetchRandomRecipes(
         r."imageUrl",
         r.servings,
         r."totalMinutes",
+        r.cuisine,
         r.tags,
         r.ingredients,
         r.steps,
@@ -70,7 +72,7 @@ async function fetchRandomRecipes(
       LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
       WHERE r."userId" NOT IN (${placeholders})
       GROUP BY r.id, r."userId", r.title, r.description, r."imageUrl", r.servings, r."totalMinutes", 
-               r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
       ORDER BY score DESC, r."createdAt" DESC
       LIMIT $${excludeUserIds.length + 1}
     `;
@@ -85,6 +87,7 @@ async function fetchRandomRecipes(
         r."imageUrl",
         r.servings,
         r."totalMinutes",
+        r.cuisine,
         r.tags,
         r.ingredients,
         r.steps,
@@ -101,7 +104,7 @@ async function fetchRandomRecipes(
       FROM "Recipe" r
       LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
       GROUP BY r.id, r."userId", r.title, r.description, r."imageUrl", r.servings, r."totalMinutes", 
-               r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
       ORDER BY score DESC, r."createdAt" DESC
       LIMIT $1
     `;
