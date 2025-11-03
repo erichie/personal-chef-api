@@ -9,7 +9,6 @@ import {
   trackAiUsage,
   AiEndpoint,
   checkParseRecipeLimit,
-  validateUserTokens,
   MEAL_PLAN_TOKEN_COST,
 } from "@/lib/ai-usage-utils";
 
@@ -28,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     let usedTokens = false;
 
-    // If tokens are provided, validate them instead of checking limit
+    // If tokens are provided, validate the amount (tokens are stored on device)
     if (payload.tokensToUse !== undefined) {
       if (payload.tokensToUse !== MEAL_PLAN_TOKEN_COST) {
         return NextResponse.json(
@@ -44,25 +43,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const tokenValidation = await validateUserTokens(
-        user.id,
-        MEAL_PLAN_TOKEN_COST
-      );
-
-      if (!tokenValidation.valid) {
-        return NextResponse.json(
-          {
-            error: tokenValidation.error || "Insufficient tokens",
-            code: "INSUFFICIENT_TOKENS",
-            details: {
-              required: MEAL_PLAN_TOKEN_COST,
-              currentBalance: tokenValidation.currentBalance,
-            },
-          },
-          { status: 402 }
-        );
-      }
-
+      // Token balance is managed on device, so we trust the mobile app
+      // Just verify they're sending the correct amount
       usedTokens = true;
     } else {
       // No tokens provided - check normal limit

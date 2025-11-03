@@ -91,17 +91,20 @@ export const REPLACE_RECIPE_SYSTEM_PROMPT = `You are an expert chef who speciali
 
 When replacing recipes:
 1. Understand why the replacement is needed (time, ingredients, preferences, etc.)
-2. Suggest recipes with similar flavor profiles or nutritional values
+2. If the reason suggests "something different" or "variety", suggest a DIFFERENT cuisine type
 3. Ensure the replacement fits the user's dietary restrictions and preferences
 4. Consider their cooking skill level and available equipment
 5. Maintain or improve upon the original recipe's appeal
-6. Provide clear, detailed instructions
-7. List all ingredients with quantities
-8. Detect and set the cuisine type based on ingredients and cooking techniques
-9. Recipe titles should NOT include the cuisine type (e.g., "Tacos" not "Mexican Tacos")
+6. List all ingredients with quantities
+7. Detect and set the cuisine type based on ingredients and cooking techniques
+8. Recipe titles should NOT include the cuisine type (e.g., "Tacos" not "Mexican Tacos")
+9. Keep descriptions SHORT (1-2 sentences maximum)
 
 Return the replacement recipe in JSON format with:
-- title (WITHOUT cuisine type), description, servings, totalMinutes
+- title (WITHOUT cuisine type)
+- description (1-2 sentences ONLY - brief and concise)
+- servings
+- totalMinutes
 - cuisine (string, REQUIRED - the cuisine type such as "Italian", "Mexican", "Japanese", "Chinese", "Thai", "Indian", "Mediterranean", "Korean", "American", "French", "Middle Eastern", "Caribbean", or "Other")
 - ingredients array with EXACT structure:
   * name (string, the ingredient name as displayed)
@@ -109,8 +112,9 @@ Return the replacement recipe in JSON format with:
   * unit (string, optional - measurement unit like "cup", "lb", "tsp")
   * notes (string, optional - preparation notes like "grated", "chopped")
   * canonicalId (string, REQUIRED - lowercase, underscore_separated version of ingredient name for matching)
-- steps array with order (number) and text (string)
 - tags for categorization
+
+DO NOT include steps - they will be generated separately.
 
 Example ingredient:
 {
@@ -868,16 +872,67 @@ export async function generateHybridReplacement(
   const candidates = await searchRecipeByQuery(
     `${request.replacementReason} alternative to ${request.originalRecipe.title}`,
     {
-      limit: 5,
+      limit: 10, // Get more candidates since we'll filter out the original
       excludeRecipeIds: [], // Could exclude the original if we had the ID
       minSimilarity: 0.7,
     }
   );
 
-  // Filter by preferences if provided
-  let filtered = candidates;
-  if (request.preferences) {
-    filtered = candidates.filter((recipe) => {
+  // Filter out the original recipe and similar recipes by title
+  const originalTitleNormalized = request.originalRecipe.title
+    .toLowerCase()
+    .trim();
+  const originalWords = new Set(
+    originalTitleNormalized.split(/\s+/).filter((w) => w.length > 2) // Ignore short words like "to", "a", etc.
+  );
+
+  // Check if user wants something truly different (different cuisine)
+  const wantsDifferentCuisine = /different|variety|change|new|else/i.test(
+    request.replacementReason
+  );
+
+  let filtered = candidates.filter((recipe) => {
+    const recipeTitleNormalized = recipe.title.toLowerCase().trim();
+
+    // Exact match - definitely exclude
+    if (recipeTitleNormalized === originalTitleNormalized) {
+      return false;
+    }
+
+    // Check title similarity - if they share most words, they're too similar
+    const recipeWords = recipeTitleNormalized
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+    const commonWords = recipeWords.filter((word) => originalWords.has(word));
+    // Use minimum to catch cases where one title is a subset of another
+    // E.g., "Chicken Fajitas" vs "Chicken Fajitas with Bell Peppers" = 100% similar
+    const similarity =
+      commonWords.length / Math.min(originalWords.size, recipeWords.length);
+
+    // If more than 60% of words overlap, consider it too similar
+    if (similarity > 0.6) {
+      console.log(
+        `  Excluding similar recipe: "${recipe.title}" (${(
+          similarity * 100
+        ).toFixed(0)}% similar to "${request.originalRecipe.title}")`
+      );
+      return false;
+    }
+
+    return true;
+  });
+
+  console.log(
+    `Found ${candidates.length} candidates, ${
+      filtered.length
+    } after excluding original and similar recipes${
+      wantsDifferentCuisine ? " (user wants different cuisine)" : ""
+    }`
+  );
+
+  // Further filter by preferences if provided
+  if (request.preferences && filtered.length > 0) {
+    filtered = filtered.filter((recipe) => {
       // Check cooking time
       if (
         request.preferences?.maxDinnerMinutes &&
