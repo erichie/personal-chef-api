@@ -6,6 +6,7 @@ import { prisma } from "./prisma";
 // Free user limits (lifetime)
 export const FREE_MEAL_PLAN_LIMIT = 3;
 export const FREE_ENDPOINT_LIMIT = 3; // Per endpoint
+export const FREE_CHAT_LIMIT = 25; // Higher limit for chat endpoint
 
 // Pro user limits
 export const PRO_MEAL_PLAN_LIMIT = 10; // Per 30-day rolling window
@@ -27,6 +28,8 @@ export enum AiEndpoint {
   PARSE_PANTRY = "parse-pantry",
   CHAT_INSTRUCTION = "chat-instruction",
   EXPLAIN_INSTRUCTION = "explain-instruction",
+  CHAT_CHEF = "chat-chef",
+  CHAT = "chat",
 }
 
 /**
@@ -262,6 +265,72 @@ export async function checkExplainInstructionLimit(
 }
 
 /**
+ * Check chat chef limit for user
+ */
+export async function checkChatChefLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.CHAT_CHEF);
+}
+
+/**
+ * Check chat limit for user (higher free limit of 25)
+ */
+export async function checkChatLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  // Fetch user's pro status
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isPro: true },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const isPro = user.isPro;
+
+  // Pro users: unlimited
+  if (isPro) {
+    return {
+      allowed: true,
+      limit: Infinity,
+      used: 0,
+      remaining: Infinity,
+      resetsAt: null,
+    };
+  }
+
+  // Free users: lifetime limit of 25
+  const lifetimeUsages = await prisma.aiUsage.findMany({
+    where: {
+      userId,
+      endpoint: AiEndpoint.CHAT,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+    select: {
+      createdAt: true,
+    },
+  });
+
+  const used = lifetimeUsages.length;
+  const limit = FREE_CHAT_LIMIT;
+  const remaining = Math.max(0, limit - used);
+  const allowed = used < limit;
+
+  return {
+    allowed,
+    limit,
+    used,
+    remaining,
+    resetsAt: null, // Lifetime limits never reset
+  };
+}
+
+/**
  * Get AI usage statistics across all endpoints for a user
  * Returns comprehensive limit info based on user type (free/pro)
  */
@@ -274,6 +343,8 @@ export async function getAiUsageStats(userId: string): Promise<{
   parsePantry: UsageLimitCheck & { tokenCost: number };
   chatInstruction: UsageLimitCheck & { tokenCost: number };
   explainInstruction: UsageLimitCheck & { tokenCost: number };
+  chatChef: UsageLimitCheck & { tokenCost: number };
+  chat: UsageLimitCheck & { tokenCost: number };
 }> {
   // Get limits for all endpoints
   const [
@@ -285,6 +356,8 @@ export async function getAiUsageStats(userId: string): Promise<{
     parsePantryLimit,
     chatInstructionLimit,
     explainInstructionLimit,
+    chatChefLimit,
+    chatLimit,
   ] = await Promise.all([
     checkMealPlanLimit(userId),
     checkGenerateRecipeLimit(userId),
@@ -294,6 +367,8 @@ export async function getAiUsageStats(userId: string): Promise<{
     checkParsePantryLimit(userId),
     checkChatInstructionLimit(userId),
     checkExplainInstructionLimit(userId),
+    checkChatChefLimit(userId),
+    checkChatLimit(userId),
   ]);
 
   return {
@@ -309,6 +384,14 @@ export async function getAiUsageStats(userId: string): Promise<{
     },
     explainInstruction: {
       ...explainInstructionLimit,
+      tokenCost: MEAL_PLAN_TOKEN_COST,
+    },
+    chatChef: {
+      ...chatChefLimit,
+      tokenCost: MEAL_PLAN_TOKEN_COST,
+    },
+    chat: {
+      ...chatLimit,
       tokenCost: MEAL_PLAN_TOKEN_COST,
     },
   };

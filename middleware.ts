@@ -4,6 +4,11 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Skip middleware for streaming endpoints to prevent buffering
+  if (pathname === "/api/ai/chat") {
+    return NextResponse.next();
+  }
+
   // Check if the request is for a protected API route
   const protectedRoutes = ["/api/sync", "/api/ai"];
   const isProtectedRoute = protectedRoutes.some((route) =>
