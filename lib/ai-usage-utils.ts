@@ -30,6 +30,7 @@ export enum AiEndpoint {
   EXPLAIN_INSTRUCTION = "explain-instruction",
   CHAT_CHEF = "chat-chef",
   CHAT = "chat",
+  PARSE_ONBOARDING_RESPONSE = "parse-onboarding-response",
 }
 
 /**
@@ -331,6 +332,15 @@ export async function checkChatLimit(
 }
 
 /**
+ * Check parse onboarding response limit for user
+ */
+export async function checkParseOnboardingResponseLimit(
+  userId: string
+): Promise<UsageLimitCheck> {
+  return checkEndpointLimit(userId, AiEndpoint.PARSE_ONBOARDING_RESPONSE);
+}
+
+/**
  * Get AI usage statistics across all endpoints for a user
  * Returns comprehensive limit info based on user type (free/pro)
  */
@@ -345,6 +355,7 @@ export async function getAiUsageStats(userId: string): Promise<{
   explainInstruction: UsageLimitCheck & { tokenCost: number };
   chatChef: UsageLimitCheck & { tokenCost: number };
   chat: UsageLimitCheck & { tokenCost: number };
+  parseOnboardingResponse: UsageLimitCheck & { tokenCost: number };
 }> {
   // Get limits for all endpoints
   const [
@@ -358,6 +369,7 @@ export async function getAiUsageStats(userId: string): Promise<{
     explainInstructionLimit,
     chatChefLimit,
     chatLimit,
+    parseOnboardingResponseLimit,
   ] = await Promise.all([
     checkMealPlanLimit(userId),
     checkGenerateRecipeLimit(userId),
@@ -369,6 +381,7 @@ export async function getAiUsageStats(userId: string): Promise<{
     checkExplainInstructionLimit(userId),
     checkChatChefLimit(userId),
     checkChatLimit(userId),
+    checkParseOnboardingResponseLimit(userId),
   ]);
 
   return {
@@ -392,6 +405,10 @@ export async function getAiUsageStats(userId: string): Promise<{
     },
     chat: {
       ...chatLimit,
+      tokenCost: MEAL_PLAN_TOKEN_COST,
+    },
+    parseOnboardingResponse: {
+      ...parseOnboardingResponseLimit,
       tokenCost: MEAL_PLAN_TOKEN_COST,
     },
   };

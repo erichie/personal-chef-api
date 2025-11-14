@@ -5,15 +5,16 @@
 ```
 /api
 ├── /ai
-│   ├── POST /meal-plan             → Generate meal plan
-│   ├── POST /replace-recipe        → Replace recipe in meal plan
-│   ├── POST /parse-recipe          → Parse recipe from URL
-│   ├── POST /generate-recipe       → Generate or refine recipe
-│   ├── POST /explain-instruction   → Explain cooking instruction
-│   ├── POST /chat-instruction      → Chat about instruction
-│   ├── POST /chat-chef             → Conversational chef assistant
-│   ├── POST /chat                  → Streaming chat for onboarding & general use
-│   └── POST /parse-pantry          → Parse pantry from text
+│   ├── POST /meal-plan                      → Generate meal plan
+│   ├── POST /replace-recipe                 → Replace recipe in meal plan
+│   ├── POST /parse-recipe                   → Parse recipe from URL
+│   ├── POST /generate-recipe                → Generate or refine recipe
+│   ├── POST /explain-instruction            → Explain cooking instruction
+│   ├── POST /chat-instruction               → Chat about instruction
+│   ├── POST /chat-chef                      → Conversational chef assistant
+│   ├── POST /chat                           → Streaming chat for onboarding & general use
+│   ├── POST /parse-onboarding-response      → Extract structured data from onboarding messages
+│   └── POST /parse-pantry                   → Parse pantry from text
 │
 ├── /me
 │   ├── GET   /                     → Get current user data
@@ -863,16 +864,17 @@ All endpoints use consistent error handling:
 
 The endpoints use different OpenAI models based on complexity:
 
-| Endpoint            | Model                 | Reason                                  |
-| ------------------- | --------------------- | --------------------------------------- |
-| Generate Recipe     | `gpt-4o`              | High quality needed for recipe creation |
-| Explain Instruction | `gpt-4o-mini`         | Faster, cheaper for explanations        |
-| Chat Instruction    | `gpt-4o-mini`         | Real-time conversation support          |
-| Chat                | `gpt-4o-mini`         | Streaming onboarding & general chat     |
-| Parse Pantry        | `gpt-4o-mini`         | Simple parsing task                     |
-| Meal Plan           | `gpt-4-turbo-preview` | Complex multi-recipe generation         |
-| Replace Recipe      | `gpt-4-turbo-preview` | Context-aware substitution              |
-| Parse Recipe        | `gpt-4-turbo-preview` | Accurate extraction from HTML           |
+| Endpoint                   | Model                 | Reason                                  |
+| -------------------------- | --------------------- | --------------------------------------- |
+| Generate Recipe            | `gpt-4o`              | High quality needed for recipe creation |
+| Explain Instruction        | `gpt-4o-mini`         | Faster, cheaper for explanations        |
+| Chat Instruction           | `gpt-4o-mini`         | Real-time conversation support          |
+| Chat                       | `gpt-4o-mini`         | Streaming onboarding & general chat     |
+| Parse Onboarding Response  | `gpt-4o-mini`         | Fast, consistent data extraction        |
+| Parse Pantry               | `gpt-4o-mini`         | Simple parsing task                     |
+| Meal Plan                  | `gpt-4-turbo-preview` | Complex multi-recipe generation         |
+| Replace Recipe             | `gpt-4-turbo-preview` | Context-aware substitution              |
+| Parse Recipe               | `gpt-4-turbo-preview` | Accurate extraction from HTML           |
 
 ---
 
@@ -884,6 +886,7 @@ Consider implementing these rate limits in production:
 - **Explain Instruction**: 50 requests/hour per user
 - **Chat Instruction**: 100 requests/hour per user
 - **Chat**: 50 requests/hour per user (onboarding & general)
+- **Parse Onboarding Response**: 20 requests/hour per user (or rely on usage limits)
 - **Parse Pantry**: 20 requests/hour per user
 - **Meal Plan**: 5 requests/hour per user
 - **Replace Recipe**: 10 requests/hour per user
@@ -956,19 +959,20 @@ BETTER_AUTH_URL=http://localhost:3000
 
 ## Implementation Notes
 
-### New Endpoints (5)
+### New Endpoints (6)
 
 1. ✅ **Generate Recipe** - `/api/ai/generate-recipe`
 2. ✅ **Explain Instruction** - `/api/ai/explain-instruction`
 3. ✅ **Chat Instruction** - `/api/ai/chat-instruction`
 4. ✅ **Parse Pantry** - `/api/ai/parse-pantry`
 5. ✅ **Chat** - `/api/ai/chat` (streaming)
+6. ✅ **Parse Onboarding Response** - `/api/ai/parse-onboarding-response`
 
 ### Existing Endpoints (3)
 
-5. ✅ **Meal Plan** - `/api/ai/meal-plan`
-6. ✅ **Replace Recipe** - `/api/ai/replace-recipe`
-7. ✅ **Parse Recipe** - `/api/ai/parse-recipe`
+7. ✅ **Meal Plan** - `/api/ai/meal-plan`
+8. ✅ **Replace Recipe** - `/api/ai/replace-recipe`
+9. ✅ **Parse Recipe** - `/api/ai/parse-recipe`
 
 ---
 
@@ -978,9 +982,10 @@ BETTER_AUTH_URL=http://localhost:3000
 2. 🟡 **IMPORTANT** - Explain Instruction (enhances cooking UX)
 3. 🟡 **IMPORTANT** - Chat Instruction (interactive help)
 4. 🟡 **IMPORTANT** - Chat (onboarding & general streaming)
-5. 🟢 **NICE TO HAVE** - Parse Pantry (Apple Intelligence handles this)
+5. 🟡 **IMPORTANT** - Parse Onboarding Response (reliable onboarding data)
+6. 🟢 **NICE TO HAVE** - Parse Pantry (Apple Intelligence handles this)
 
-All 5 new endpoints are **now implemented and ready to use!** 🎉
+All 6 new endpoints are **now implemented and ready to use!** 🎉
 
 ---
 
@@ -1098,5 +1103,224 @@ curl -X POST http://localhost:3000/api/ai/chat \
 - Max tokens: 200 for concise responses
 - Suitable for onboarding flows, general chat, and personalized interactions
 - Higher free limit (25 vs 3) makes it accessible for onboarding experiences
+
+---
+
+### 9. Parse Onboarding Response
+
+**Endpoint:** `POST /api/ai/parse-onboarding-response`
+
+**Purpose:** Extracts structured data from user responses during the onboarding flow. Separates data extraction from conversational AI for more reliable and maintainable onboarding.
+
+**Request Body:**
+
+```json
+{
+  "userMessage": "I'm allergic to peanuts and I don't like olives",
+  "currentPhase": "ASK_ALLERGIES",
+  "conversationContext": {
+    "previousMessages": [
+      {
+        "role": "assistant",
+        "content": "Any allergies or foods I should completely avoid?"
+      },
+      {
+        "role": "user",
+        "content": "I'm allergic to peanuts and I don't like olives"
+      }
+    ],
+    "ingredientPreferences": {
+      "clarifyWithUser": [
+        { "name": "Olives", "count": 1, "reason": "possible_allergy_or_intolerance" }
+      ]
+    }
+  },
+  "tokensToUse": 25  // Optional - bypass limit
+}
+```
+
+**Onboarding Phases:**
+
+- `ASK_NAME` - Extract user's first name
+- `ASK_ALLERGIES` - Extract allergies, dislikes, and dietary restrictions
+- `ASK_DIET` - Extract diet style (keto, vegan, etc.)
+- `ASK_HOUSEHOLD` - Extract household size (1-20 people)
+- `ASK_COOKING_FREQUENCY` - Extract cooking days per week (1-7)
+- `ASK_TIME_AND_SKILL` - Extract cooking time (minutes) and skill level
+- `SHOW_RECIPES`, `RECIPE_SWIPE`, `MEAL_PLAN_CONFIRM`, `COMPLETE` - No extraction
+
+**Response:**
+
+```json
+{
+  "parsed": {
+    "allergies": ["peanuts"],
+    "dislikes": ["olives"]
+  },
+  "confidence": "high"
+}
+```
+
+**Phase-Specific Examples:**
+
+**Extract name (ASK_NAME):**
+
+Request:
+```json
+{
+  "userMessage": "I'm Sarah",
+  "currentPhase": "ASK_NAME"
+}
+```
+
+Response:
+```json
+{
+  "parsed": {
+    "userName": "Sarah"
+  },
+  "confidence": "high"
+}
+```
+
+**Extract diet (ASK_DIET):**
+
+Request:
+```json
+{
+  "userMessage": "I follow a keto diet",
+  "currentPhase": "ASK_DIET"
+}
+```
+
+Response:
+```json
+{
+  "parsed": {
+    "dietStyle": "keto"
+  },
+  "confidence": "high"
+}
+```
+
+**Extract household size (ASK_HOUSEHOLD):**
+
+Request:
+```json
+{
+  "userMessage": "Family of 4",
+  "currentPhase": "ASK_HOUSEHOLD"
+}
+```
+
+Response:
+```json
+{
+  "parsed": {
+    "householdSize": 4
+  },
+  "confidence": "high"
+}
+```
+
+**Extract time and skill (ASK_TIME_AND_SKILL):**
+
+Request:
+```json
+{
+  "userMessage": "I usually have about 30 minutes and I'm a beginner",
+  "currentPhase": "ASK_TIME_AND_SKILL"
+}
+```
+
+Response:
+```json
+{
+  "parsed": {
+    "cookingTimeMinutes": 30,
+    "skillLevel": "beginner"
+  },
+  "confidence": "high"
+}
+```
+
+**Parsed Data Structure:**
+
+```typescript
+{
+  parsed: {
+    // Name (ASK_NAME)
+    userName?: string;
+    
+    // Allergies & Preferences (ASK_ALLERGIES)
+    allergies?: string[];           // Serious reactions
+    dislikes?: string[];            // Preferences
+    restrictions?: Array<{
+      ingredient: string;
+      reason?: string;
+    }>;
+    
+    // Diet (ASK_DIET)
+    dietStyle?: string;             // e.g., "keto", "vegan", "balanced"
+    
+    // Household (ASK_HOUSEHOLD)
+    householdSize?: number;         // 1-20
+    
+    // Cooking Frequency (ASK_COOKING_FREQUENCY)
+    cookingDays?: number;           // 1-7 days per week
+    
+    // Time & Skill (ASK_TIME_AND_SKILL)
+    cookingTimeMinutes?: number;    // 1-240 minutes
+    skillLevel?: "beginner" | "intermediate" | "advanced";
+  };
+  confidence?: "high" | "medium" | "low";
+}
+```
+
+**Validation & Normalization:**
+
+- **Names**: Capitalized, max 50 characters
+- **Allergies/Dislikes**: Lowercase, deduplicated
+- **Diet Style**: Maps variations to standard values (e.g., "plant-based" → "vegan", "no diet" → "balanced")
+- **Numbers**: Validated ranges (household: 1-20, days: 1-7, time: 1-240)
+- **Skill Level**: Only accepts "beginner", "intermediate", "advanced"
+
+**Error Handling:**
+
+Returns 200 with empty/partial data on parsing failures (graceful fallback to client-side parsing):
+
+```json
+{
+  "parsed": {},
+  "confidence": "low"
+}
+```
+
+**Usage Limits:**
+
+- **Free users**: 3 lifetime calls (standard limit)
+- **Pro users**: Unlimited
+- **Token bypass**: 25 tokens per call
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:3000/api/ai/parse-onboarding-response \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "userMessage": "I'"'"'m allergic to shellfish",
+    "currentPhase": "ASK_ALLERGIES"
+  }'
+```
+
+**Notes:**
+
+- Uses `gpt-4o-mini` for fast, cheap parsing
+- Temperature: 0.1 for consistent extraction
+- Max tokens: 500
+- Called once per user message during onboarding (~8-10 times per session)
+- Works alongside `/api/ai/chat` endpoint
+- Frontend has client-side fallback if parsing fails
 
 ---
