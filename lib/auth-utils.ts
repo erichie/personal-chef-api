@@ -17,7 +17,9 @@ export function getTokenFromRequest(request: NextRequest): string | null {
   }
 
   // Check cookie
-  const cookieToken = request.cookies.get("better-auth.session_token")?.value;
+  const cookieToken =
+    request.cookies.get("__Secure-better-auth.session_token")?.value ??
+    request.cookies.get("better-auth.session_token")?.value;
   if (cookieToken) {
     return cookieToken;
   }

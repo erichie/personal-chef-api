@@ -24,7 +24,9 @@ export function middleware(request: NextRequest) {
   const authToken = request.headers
     .get("Authorization")
     ?.replace("Bearer ", "");
-  const cookieToken = request.cookies.get("better-auth.session_token")?.value;
+  const cookieToken =
+    request.cookies.get("__Secure-better-auth.session_token")?.value ??
+    request.cookies.get("better-auth.session_token")?.value;
 
   // Allow if any auth method is present
   // Actual validation happens in the API routes via requireAuth()

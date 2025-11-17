@@ -4,6 +4,7 @@ import { anonymous } from "better-auth/plugins";
 import { prisma } from "./prisma";
 import { generateFriendCode } from "./friend-code-generator";
 import { Prisma } from "@prisma/client";
+import { ensureCookbookSlug } from "./cookbook-utils";
 
 /**
  * Helper function to ensure a user has a friend code
@@ -163,6 +164,12 @@ export const auth = betterAuth({
           `Final friendCode for user ${registeredUser.id}: ${finalUser?.friendCode}`
         );
 
+        try {
+          await ensureCookbookSlug(registeredUser.id);
+        } catch (error) {
+          console.error("Failed to ensure cookbook slug for user", error);
+        }
+
         // Delete anonymous user's profile (cascade will handle the rest)
         if (anonymousProfile) {
           await prisma.userProfile.delete({
@@ -198,6 +205,12 @@ export const auth = betterAuth({
     console.log(`onAfterSignUp called for user ${user.id}`);
     await ensureUserHasFriendCode(user.id);
     console.log(`Friend code ensured for user ${user.id}`);
+    try {
+      await ensureCookbookSlug(user.id);
+      console.log(`Cookbook slug ensured for user ${user.id}`);
+    } catch (error) {
+      console.error("Failed to ensure cookbook slug", error);
+    }
   },
 });
 

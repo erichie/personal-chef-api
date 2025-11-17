@@ -847,7 +847,12 @@ export function doesRecipeMeetDietaryRestrictions(
   // Check allergies
   if (preferences.allergies && preferences.allergies.length > 0) {
     for (const allergen of preferences.allergies) {
-      if (ingredientText.includes(allergen.toLowerCase())) {
+      const allergenText =
+        typeof allergen === "string"
+          ? allergen.toLowerCase()
+          : String(allergen ?? "").toLowerCase();
+      if (!allergenText) continue;
+      if (ingredientText.includes(allergenText)) {
         return false;
       }
     }

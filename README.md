@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Personal Chef Web
 
-## Getting Started
+This Next.js app mirrors the BetterAuth-powered mobile experience so cooks can:
 
-First, run the development server:
+- Sign in with the same BetterAuth credentials (including anonymous-to-email migrations).
+- Author recipes from the browser and optionally publish them.
+- Share public recipe URLs that render SEO-friendly pages.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Environment
+
+Create a `.env` if you have not already and add:
+
+```
+DATABASE_URL="postgres://..."
+BETTER_AUTH_SECRET="..."
+BETTER_AUTH_URL="http://localhost:3000/api/auth"
+NEXT_PUBLIC_BETTER_AUTH_URL="http://localhost:3000/api/auth"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`NEXT_PUBLIC_APP_URL` is used for server-side fetches when constructing share URLs.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run migrations whenever the Prisma schema changes:
 
-## Learn More
+```
+npm install
+npm run db:generate
+# or
+pnpm install
+pnpm db:generate
+```
 
-To learn more about Next.js, take a look at the following resources:
+Migrations live in `prisma/migrations`. Apply them to your dev database with `npx prisma migrate dev`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+npm run dev
+```
 
-## Deploy on Vercel
+Key routes:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `/login` – BetterAuth email/password sign-up & sign-in UI.
+- `/` – Authenticated dashboard with discovery feed.
+- `/recipes` – Manage personal recipes, publish/unpublish, copy share links.
+- `/recipes/new` – Create recipes directly from the browser.
+- `/cookbook` – Manage your public cookbook profile and drafts.
+- `/cookbook/[slug]` – Public cookbook page (mini food blog).
+- `/recipes/[slug]` – Public recipe page.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+API additions:
+
+- `POST /api/recipes` now accepts `publish`, `slug`, `excerpt`, `shareImageUrl`, `seoTitle`, `seoDescription`.
+- `GET /api/recipes/mine`
+- `POST/DELETE /api/recipes/[id]/publish`
+- `GET /api/public/recipes/[slug]`
+- `GET/PATCH /api/me/cookbook`
+- `GET /api/public/cookbooks/[slug]`
+
+After logging in via the web, cookies are set by BetterAuth so API requests from the browser automatically include the correct session.

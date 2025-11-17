@@ -22,6 +22,9 @@ interface Recipe {
   source: string | null;
   createdAt: Date;
   updatedAt: Date;
+  slug?: string | null;
+  isPublished?: boolean | null;
+  publishedAt?: Date | null;
   upvotes?: number;
   downvotes?: number;
   score?: number;
@@ -61,6 +64,10 @@ async function fetchRandomRecipes(
         r.source,
         r."createdAt",
         r."updatedAt",
+        rp.slug,
+        rp."isPublished",
+        rp."publishedAt",
+        u."displayName" AS "ownerName",
         COALESCE(SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END), 0)::int AS upvotes,
         COALESCE(SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 0)::int AS downvotes,
         COALESCE(
@@ -70,9 +77,12 @@ async function fetchRandomRecipes(
         )::int AS score
       FROM "Recipe" r
       LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
+      LEFT JOIN "RecipePublication" rp ON rp."recipeId" = r.id AND rp."isPublished" = true
+      LEFT JOIN "User" u ON u.id = r."userId"
       WHERE r."userId" NOT IN (${placeholders})
       GROUP BY r.id, r."userId", r.title, r.description, r."imageUrl", r.servings, r."totalMinutes", 
-               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt",
+               rp.slug, rp."isPublished", rp."publishedAt", u."displayName"
       ORDER BY score DESC, r."createdAt" DESC
       LIMIT $${excludeUserIds.length + 1}
     `;
@@ -94,6 +104,10 @@ async function fetchRandomRecipes(
         r.source,
         r."createdAt",
         r."updatedAt",
+        rp.slug,
+        rp."isPublished",
+        rp."publishedAt",
+        u."displayName" AS "ownerName",
         COALESCE(SUM(CASE WHEN v."voteType" = 'upvote' THEN 1 ELSE 0 END), 0)::int AS upvotes,
         COALESCE(SUM(CASE WHEN v."voteType" = 'downvote' THEN 1 ELSE 0 END), 0)::int AS downvotes,
         COALESCE(
@@ -103,8 +117,11 @@ async function fetchRandomRecipes(
         )::int AS score
       FROM "Recipe" r
       LEFT JOIN "RecipeVote" v ON r.id = v."recipeId"
+      LEFT JOIN "RecipePublication" rp ON rp."recipeId" = r.id AND rp."isPublished" = true
+      LEFT JOIN "User" u ON u.id = r."userId"
       GROUP BY r.id, r."userId", r.title, r.description, r."imageUrl", r.servings, r."totalMinutes", 
-               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt"
+               r.cuisine, r.tags, r.ingredients, r.steps, r.source, r."createdAt", r."updatedAt",
+               rp.slug, rp."isPublished", rp."publishedAt", u."displayName"
       ORDER BY score DESC, r."createdAt" DESC
       LIMIT $1
     `;

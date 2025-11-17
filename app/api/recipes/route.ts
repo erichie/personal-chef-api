@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
+import { publishRecipe } from "@/lib/recipe-publication";
 
 const createRecipeSchema = z.object({
   title: z.string().min(1),
@@ -16,6 +17,12 @@ const createRecipeSchema = z.object({
   steps: z.array(z.any()).optional(),
   source: z.string().optional(),
   sourceUrl: z.string().url().optional(),
+  publish: z.boolean().optional(),
+  slug: z.string().min(3).max(64).optional(),
+  excerpt: z.string().max(280).optional(),
+  shareImageUrl: z.string().url().optional(),
+  seoTitle: z.string().max(120).optional(),
+  seoDescription: z.string().max(180).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -47,9 +54,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    let publication = null;
+
+    if (data.publish) {
+      publication = await publishRecipe({
+        recipeId: recipe.id,
+        userId: user.id,
+        slug: data.slug,
+        excerpt: data.excerpt,
+        shareImageUrl: data.shareImageUrl,
+        seoTitle: data.seoTitle,
+        seoDescription: data.seoDescription,
+      });
+    }
+
     console.log("✅ Recipe created successfully:", recipe.id);
 
-    return NextResponse.json({ recipe }, { status: 201 });
+    return NextResponse.json({ recipe, publication }, { status: 201 });
   } catch (error) {
     console.error("❌ Create Recipe Error:", error);
     return handleApiError(error);

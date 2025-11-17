@@ -25,6 +25,7 @@ model User {
   friendCode    String?  @unique
   bio           String?
   avatarUrl     String?
+  cookbookSlug  String?  @unique
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -33,6 +34,7 @@ model User {
   sessions          Session[]
   accounts          Account[]
   recipes           Recipe[]
+  recipePublications RecipePublication[]
   posts             RecipePost[]
   postLikes         PostLike[]
   comments          PostComment[]
@@ -134,9 +136,32 @@ model Recipe {
   usages       RecipeUsage[]
   shares       RecipeShare[]
   votes        RecipeVote[]
+  publication  RecipePublication?
   
   @@index([userId])
   @@index([userId, createdAt])
+}
+
+model RecipePublication {
+  id             String   @id @default(uuid())
+  recipeId       String   @unique
+  authorId       String
+  slug           String   @unique
+  isPublished    Boolean  @default(false)
+  publishedAt    DateTime?
+  excerpt        String?
+  shareImageUrl  String?
+  seoTitle       String?
+  seoDescription String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([isPublished, publishedAt])
 }
 
 // Friendship management
