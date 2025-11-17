@@ -20,6 +20,17 @@ interface IngredientRow {
   notes: string;
 }
 
+interface RecipeFormProps {
+  mode: "create" | "edit";
+  recipeId?: string;
+  initialData?: {
+    title: string;
+    description?: string | null;
+    ingredients?: IngredientJSON[];
+    steps?: StepJSON[];
+  };
+}
+
 export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
   const [title, setTitle] = useState(initialData?.title ?? "");
   const [description, setDescription] = useState(initialData?.description ?? "");

@@ -22,6 +22,7 @@ interface Recipe {
   source: string | null;
   createdAt: Date;
   updatedAt: Date;
+  ownerName?: string | null;
   slug?: string | null;
   isPublished?: boolean | null;
   publishedAt?: Date | null;

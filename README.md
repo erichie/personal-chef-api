@@ -5,6 +5,7 @@ This Next.js app mirrors the BetterAuth-powered mobile experience so cooks can:
 - Sign in with the same BetterAuth credentials (including anonymous-to-email migrations).
 - Author recipes from the browser and optionally publish them.
 - Share public recipe URLs that render SEO-friendly pages.
+- Organize cookbook sections (mini collections inside a cookbook) and share a searchable public cookbook page.
 
 ## Environment
 
@@ -46,8 +47,8 @@ Key routes:
 - `/` – Authenticated dashboard with discovery feed.
 - `/recipes` – Manage personal recipes, publish/unpublish, copy share links.
 - `/recipes/new` – Create recipes directly from the browser.
-- `/cookbook` – Manage your public cookbook profile and drafts.
-- `/cookbook/[slug]` – Public cookbook page (mini food blog).
+- `/cookbook` – Manage your public cookbook profile, sections, and drafts.
+- `/cookbook/[slug]` – Public cookbook page (searchable, sectioned view).
 - `/recipes/[slug]` – Public recipe page.
 
 API additions:
@@ -58,5 +59,22 @@ API additions:
 - `GET /api/public/recipes/[slug]`
 - `GET/PATCH /api/me/cookbook`
 - `GET /api/public/cookbooks/[slug]`
+- `GET/POST /api/cookbook/sections`
+- `PATCH/DELETE /api/cookbook/sections/[sectionId]`
+- `POST /api/cookbook/sections/[sectionId]/recipes` (add/remove assignments)
 
 After logging in via the web, cookies are set by BetterAuth so API requests from the browser automatically include the correct session.
+
+## Cookbook sections
+
+- Create, rename, or delete sections from the `/cookbook` dashboard. Each section can hold any number of recipes.
+- Assign/unassign recipes either from the cookbook sections panel or directly from `/recipes` via the section checkbox list.
+- The shareable cookbook page automatically groups recipes by section and exposes a search box that scans section names, recipe titles, and descriptions.
+
+## Testing
+
+Run unit tests (currently covering cookbook section formatting logic):
+
+```
+npm run test
+```

@@ -4,6 +4,7 @@ import { getServerSession } from "@/lib/server-session";
 import { getCookbookForUser } from "@/lib/cookbook-utils";
 import { getRequestBaseUrl } from "@/lib/request-helpers";
 import { CookbookSettings } from "@/components/cookbook/cookbook-settings";
+import { CookbookSectionsManager } from "@/components/cookbook/cookbook-sections-manager";
 
 export default async function CookbookPage() {
   const session = await getServerSession();
@@ -11,7 +12,7 @@ export default async function CookbookPage() {
     redirect("/login");
   }
 
-  const [{ user, recipes }] = await Promise.all([
+  const [{ user, recipes, sections }] = await Promise.all([
     getCookbookForUser(session.user.id),
   ]);
 
@@ -40,6 +41,14 @@ export default async function CookbookPage() {
           <CookbookSettings initialSlug={user.cookbookSlug} shareUrl={shareUrl} />
         </div>
       </section>
+
+      <CookbookSectionsManager
+        sections={sections}
+        recipes={recipes.map((recipe) => ({
+          id: recipe.id,
+          title: recipe.title,
+        }))}
+      />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

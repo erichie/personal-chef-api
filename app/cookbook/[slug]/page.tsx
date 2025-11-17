@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPublicCookbookBySlug } from "@/lib/cookbook-utils";
+import {
+  formatCookbookSections,
+  getPublicCookbookBySlug,
+} from "@/lib/cookbook-utils";
+import { PublicCookbookView } from "@/components/cookbook/public-cookbook";
 
 export async function generateMetadata({
   params,
@@ -36,53 +40,32 @@ export default async function PublicCookbookPage({
     notFound();
   }
 
+  const { sections, ungrouped } = formatCookbookSections(
+    data.sections,
+    data.publications
+  );
+
+  const serializableSections = sections.map((section) => ({
+    ...section,
+    recipes: section.recipes.map((recipe) => ({
+      ...recipe,
+      publishedAt: recipe.publishedAt ? recipe.publishedAt.toString() : null,
+    })),
+  }));
+
+  const serializableUngrouped = ungrouped.map((recipe) => ({
+    ...recipe,
+    publishedAt: recipe.publishedAt ? recipe.publishedAt.toString() : null,
+  }));
+
   return (
     <div className="min-h-screen bg-zinc-50 py-12">
-      <div className="mx-auto max-w-4xl space-y-8 rounded-3xl border border-zinc-200 bg-white p-10">
-        <div className="space-y-3 text-center">
-          <p className="text-xs uppercase tracking-wide text-pink-500">
-            Personal Chef Cookbook
-          </p>
-          <h1 className="text-4xl font-semibold text-zinc-900">
-            {data.user.displayName || "Community cookbook"}
-          </h1>
-          {data.user.bio && (
-            <p className="text-lg text-zinc-600">{data.user.bio}</p>
-          )}
-        </div>
-
-        {data.publications.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-10 text-center text-zinc-500">
-            No published recipes yet.
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            {data.publications.map((publication) => (
-              <article
-                key={publication.id}
-                className="rounded-2xl border border-zinc-200 bg-white p-5"
-              >
-                <p className="text-xs uppercase tracking-wide text-pink-500">
-                  {publication.publishedAt
-                    ? new Date(publication.publishedAt).toLocaleDateString()
-                    : "Published"}
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-zinc-900">
-                  {publication.recipe.title}
-                </h2>
-                <p className="mt-1 line-clamp-3 text-sm text-zinc-600">
-                  {publication.recipe.description || publication.excerpt}
-                </p>
-                <a
-                  href={`/recipes/${publication.slug}`}
-                  className="mt-4 inline-flex items-center text-sm font-medium text-pink-600 hover:underline"
-                >
-                  View recipe →
-                </a>
-              </article>
-            ))}
-          </div>
-        )}
+      <div className="mx-auto max-w-4xl">
+        <PublicCookbookView
+          user={data.user}
+          sections={serializableSections}
+          ungrouped={serializableUngrouped}
+        />
       </div>
     </div>
   );

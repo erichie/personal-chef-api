@@ -17,13 +17,20 @@ export interface RecipeListItem {
   description?: string | null;
   createdAt: string;
   publication?: RecipePublication | null;
+  sectionIds: string[];
+}
+
+interface SectionOption {
+  id: string;
+  name: string;
 }
 
 interface Props {
   initialRecipes: RecipeListItem[];
+  sections: SectionOption[];
 }
 
-export function RecipeManager({ initialRecipes }: Props) {
+export function RecipeManager({ initialRecipes, sections }: Props) {
   const [recipes, setRecipes] = useState(initialRecipes);
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +40,37 @@ export function RecipeManager({ initialRecipes }: Props) {
     () => recipes.filter((recipe) => recipe.publication?.isPublished).length,
     [recipes]
   );
+
+  async function toggleSection(
+    recipeId: string,
+    sectionId: string,
+    checked: boolean
+  ) {
+    try {
+      await fetch(`/api/cookbook/sections/${sectionId}/recipes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipeIds: [recipeId],
+          action: checked ? "add" : "remove",
+        }),
+      });
+      setRecipes((prev) =>
+        prev.map((recipe) =>
+          recipe.id === recipeId
+            ? {
+                ...recipe,
+                sectionIds: checked
+                  ? Array.from(new Set([...recipe.sectionIds, sectionId]))
+                  : recipe.sectionIds.filter((id) => id !== sectionId),
+              }
+            : recipe
+        )
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function publishRecipe(recipeId: string) {
     setActiveRecipeId(recipeId);
@@ -135,7 +173,7 @@ export function RecipeManager({ initialRecipes }: Props) {
               className="rounded-2xl border border-zinc-200 bg-white p-6"
             >
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
+                <div className="space-y-3">
                   <p className="text-xs uppercase tracking-wide text-zinc-500">
                     {new Date(recipe.createdAt).toLocaleDateString()}
                   </p>
@@ -145,6 +183,37 @@ export function RecipeManager({ initialRecipes }: Props) {
                   <p className="text-sm text-zinc-500">
                     {recipe.description || "No description yet."}
                   </p>
+                  <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-3">
+                    <p className="text-xs uppercase text-zinc-500">Sections</p>
+                    {sections.length === 0 ? (
+                      <p className="text-sm text-zinc-500">
+                        No sections yet. Create one on the cookbook page.
+                      </p>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {sections.map((section) => (
+                          <label
+                            key={section.id}
+                            className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm shadow-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={recipe.sectionIds.includes(section.id)}
+                              onChange={(event) =>
+                                toggleSection(
+                                  recipe.id,
+                                  section.id,
+                                  event.target.checked
+                                )
+                              }
+                              className="h-4 w-4 rounded border-zinc-300 text-pink-600 focus:ring-pink-500"
+                            />
+                            {section.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
