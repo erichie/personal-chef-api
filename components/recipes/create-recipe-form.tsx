@@ -4,6 +4,26 @@ import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { IngredientJSON, StepJSON } from "@/lib/types";
 
+const ingredientUnits = [
+  "lb",
+  "oz",
+  "cup",
+  "cups",
+  "tbsp",
+  "tsp",
+  "can",
+  "box",
+  "bag",
+  "package",
+  "whole",
+  "piece",
+  "pieces",
+  "slices",
+  "cloves",
+  "large",
+  "quart",
+];
+
 const emptyIngredient = { name: "", qty: "", unit: "", notes: "" };
 
 function parseList(value: string) {
@@ -48,7 +68,18 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
     }
     return [emptyIngredient];
   });
-  const [steps, setSteps] = useState(() => {
+  const [structuredSteps, setStructuredSteps] = useState<string[]>(() => {
+    if (initialData?.steps && initialData.steps.length > 0) {
+      return initialData.steps
+        .sort((a, b) => a.order - b.order)
+        .map((step) => step.text);
+    }
+    return [""];
+  });
+  const [useStructuredSteps, setUseStructuredSteps] = useState(
+    initialData?.steps && initialData.steps.length > 0
+  );
+  const [stepsTextarea, setStepsTextarea] = useState(() => {
     if (initialData?.steps && initialData.steps.length > 0) {
       return initialData.steps
         .sort((a, b) => a.order - b.order)
@@ -62,9 +93,55 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  function addIngredient() {
+    setIngredientRows((rows) => [...rows, { ...emptyIngredient }]);
+  }
+
+  function updateIngredient(
+    index: number,
+    field: keyof IngredientRow,
+    value: string
+  ) {
+    setIngredientRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
+  }
+
+  function removeIngredient(index: number) {
+    setIngredientRows((rows) =>
+      rows.length === 1 ? [emptyIngredient] : rows.filter((_, i) => i !== index)
+    );
+  }
+
+  function addStructuredStep() {
+    setStructuredSteps((prev) => [...prev, ""]);
+  }
+
+  function updateStructuredStep(index: number, value: string) {
+    setStructuredSteps((prev) =>
+      prev.map((step, i) => (i === index ? value : step))
+    );
+  }
+
+  function removeStructuredStep(index: number) {
+    setStructuredSteps((prev) =>
+      prev.length === 1 ? [""] : prev.filter((_, i) => i !== index)
+    );
+  }
+
+  function handleStructuredToggle(checked: boolean) {
+    if (checked && !useStructuredSteps) {
+      const parsed = parseList(stepsTextarea);
+      setStructuredSteps(parsed.length ? parsed : [""]);
+    }
+    if (!checked && useStructuredSteps) {
+      setStepsTextarea(structuredSteps.join("\n"));
+    }
+    setUseStructuredSteps(checked);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     setIsSubmitting(true);
     setError(null);
 
@@ -90,10 +167,18 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
       })
     );
 
-    const parsedSteps = parseList(steps).map((entry, index) => ({
-      order: index + 1,
-      text: entry,
-    }));
+    const parsedSteps: StepJSON[] = useStructuredSteps
+      ? structuredSteps
+          .map((text) => text.trim())
+          .filter(Boolean)
+          .map((text, index) => ({
+            order: index + 1,
+            text,
+          }))
+      : parseList(stepsTextarea).map((entry, index) => ({
+          order: index + 1,
+          text: entry,
+        }));
 
     const payload = {
       title,
@@ -166,9 +251,7 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
           </label>
           <button
             type="button"
-            onClick={() =>
-              setIngredientRows((rows) => [...rows, { ...emptyIngredient }])
-            }
+            onClick={addIngredient}
             className="text-sm font-medium text-pink-600 hover:underline"
           >
             + Add ingredient
@@ -184,11 +267,7 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
               placeholder="Ingredient name"
               value={row.name}
               onChange={(event) =>
-                setIngredientRows((rows) =>
-                  rows.map((item, i) =>
-                    i === index ? { ...item, name: event.target.value } : item
-                  )
-                )
+                updateIngredient(index, "name", event.target.value)
               }
               className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none sm:col-span-2"
               required={index === 0}
@@ -198,48 +277,37 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
               placeholder="Qty"
               value={row.qty}
               onChange={(event) =>
-                setIngredientRows((rows) =>
-                  rows.map((item, i) =>
-                    i === index ? { ...item, qty: event.target.value } : item
-                  )
-                )
+                updateIngredient(index, "qty", event.target.value)
               }
               className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none"
             />
-            <input
-              type="text"
-              placeholder="Unit"
+            <select
               value={row.unit}
               onChange={(event) =>
-                setIngredientRows((rows) =>
-                  rows.map((item, i) =>
-                    i === index ? { ...item, unit: event.target.value } : item
-                  )
-                )
+                updateIngredient(index, "unit", event.target.value)
               }
-              className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none"
-            />
+              className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none bg-white"
+            >
+              <option value="">Unit</option>
+              {ingredientUnits.map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
             <input
               type="text"
               placeholder="Notes"
               value={row.notes}
               onChange={(event) =>
-                setIngredientRows((rows) =>
-                  rows.map((item, i) =>
-                    i === index ? { ...item, notes: event.target.value } : item
-                  )
-                )
+                updateIngredient(index, "notes", event.target.value)
               }
               className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none sm:col-span-4"
             />
             {ingredientRows.length > 1 && (
               <button
                 type="button"
-                onClick={() =>
-                  setIngredientRows((rows) =>
-                    rows.filter((_, i) => i !== index)
-                  )
-                }
+                onClick={() => removeIngredient(index)}
                 className="text-left text-sm text-red-500 hover:underline sm:col-span-4"
               >
                 Remove
@@ -249,17 +317,68 @@ export function RecipeForm({ mode, recipeId, initialData }: RecipeFormProps) {
         ))}
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Steps (one per line)
-        </label>
-        <textarea
-          className="w-full rounded-2xl border border-zinc-200 px-4 py-3 focus:border-pink-500 focus:outline-none"
-          rows={6}
-          placeholder="Rinse rice"
-          value={steps}
-          onChange={(event) => setSteps(event.target.value)}
-        />
+      <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-zinc-700">Steps</label>
+          <label className="flex items-center gap-2 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={useStructuredSteps}
+              onChange={(event) =>
+                handleStructuredToggle(event.target.checked)
+              }
+              className="h-4 w-4 rounded border-zinc-300 text-pink-600 focus:ring-pink-500"
+            />
+            Structured mode
+          </label>
+        </div>
+        {useStructuredSteps ? (
+          <div className="space-y-3">
+            {structuredSteps.map((step, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white p-3"
+              >
+                <span className="text-sm font-semibold text-pink-500">
+                  {index + 1}.
+                </span>
+                <input
+                  type="text"
+                  value={step}
+                  onChange={(event) =>
+                    updateStructuredStep(index, event.target.value)
+                  }
+                  placeholder="Describe this step"
+                  className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-pink-500 focus:outline-none"
+                />
+                {structuredSteps.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeStructuredStep(index)}
+                    className="text-sm text-red-500 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addStructuredStep}
+              className="text-sm font-medium text-pink-600 hover:underline"
+            >
+              + Add step
+            </button>
+          </div>
+        ) : (
+          <textarea
+            className="w-full rounded-2xl border border-zinc-200 px-4 py-3 focus:border-pink-500 focus:outline-none"
+            rows={6}
+            placeholder="Rinse rice"
+            value={stepsTextarea}
+            onChange={(event) => setStepsTextarea(event.target.value)}
+          />
+        )}
       </div>
 
       {mode === "create" && (
