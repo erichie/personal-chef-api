@@ -25,6 +25,10 @@ EXPO_ACCESS_TOKEN="" # Optional Expo push service access token
 `BLOB_READ_WRITE_TOKEN` powers Vercel Blob client uploads for feed and recipe posts.
 `EXPO_ACCESS_TOKEN` lets the backend send Expo push notifications using your project access token (leave blank to use the default unauthenticated client, which has lower throughput).
 
+### Account deletion
+
+Send an authenticated `DELETE` request to `/api/me` (BetterAuth bearer token or web session cookie). The backend removes the `User` row and cascades through every related record (posts, comments, likes, sessions, tokens, AI usage logs, etc.), so the action is irreversible.
+
 ## Database
 
 Run migrations whenever the Prisma schema changes:
@@ -62,6 +66,7 @@ API additions:
 - `POST/DELETE /api/recipes/[id]/publish`
 - `GET /api/public/recipes/[slug]`
 - `GET/PATCH /api/me/cookbook`
+- `DELETE /api/me` – authenticated users can permanently delete their account and all associated data
 - `GET /api/public/cookbooks/[slug]`
 - `GET/POST /api/cookbook/sections`
 - `PATCH/DELETE /api/cookbook/sections/[sectionId]`

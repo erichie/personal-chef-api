@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
 import { getAiUsageStats } from "@/lib/ai-usage-utils";
+import { deleteUserAccount } from "@/lib/user-utils";
 
 /**
  * GET /api/me
@@ -136,6 +137,22 @@ export async function PATCH(request: NextRequest) {
     });
 
     return NextResponse.json({ user: updatedUser });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * DELETE /api/me
+ * Permanently delete the authenticated user and all of their data
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { user } = await requireAuth(request);
+
+    await deleteUserAccount(user.id);
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return handleApiError(error);
   }
