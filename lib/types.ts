@@ -383,6 +383,7 @@ export interface BasicPost {
   likeCount?: number;
   commentCount?: number;
   isLikedByCurrentUser?: boolean;
+  comments?: BasicPostComment[];
 }
 
 export interface RecipeBasic {
@@ -431,6 +432,16 @@ export interface FeedActivity {
   post?: RecipePost | BasicPost;
   recipe?: RecipeBasic;
   mealPlanPost?: MealPlanPost;
+}
+
+export interface BasicPostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  text: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
 }
 
 // ==================== Meal Plan Sharing Types ====================
