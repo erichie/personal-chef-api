@@ -2,6 +2,10 @@ import { prisma } from "./prisma";
 import { errors } from "./api-errors";
 import type { BasicPost, BasicPostComment } from "./types";
 import { v4 as uuidv4 } from "uuid";
+import {
+  notifyPostOwnerAboutComment,
+  notifyPostOwnerAboutLike,
+} from "./push-notifications";
 
 export async function getBasicPostWithDetails(
   postId: string,
@@ -119,6 +123,13 @@ export async function toggleBasicPostLike(
         userId,
       },
     });
+
+    await notifyPostOwnerAboutLike({
+      actorId: userId,
+      ownerId: post.userId,
+      postType: "basic",
+      postId,
+    });
   }
 
   const likeCount = await prisma.basicPostLike.count({
@@ -163,6 +174,14 @@ export async function addBasicPostComment(
         },
       },
     },
+  });
+
+  await notifyPostOwnerAboutComment({
+    actorId: userId,
+    ownerId: post.userId,
+    postType: "basic",
+    postId,
+    text,
   });
 
   return {

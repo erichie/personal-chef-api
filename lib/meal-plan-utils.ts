@@ -11,6 +11,10 @@ import type {
   TemplateMealPlanDay,
 } from "./types";
 import { v4 as uuidv4 } from "uuid";
+import {
+  notifyPostOwnerAboutComment,
+  notifyPostOwnerAboutLike,
+} from "./push-notifications";
 
 /**
  * Create a meal plan template from user's meal plan data
@@ -308,6 +312,13 @@ export async function toggleMealPlanPostLike(
         userId,
       },
     });
+
+    await notifyPostOwnerAboutLike({
+      actorId: userId,
+      ownerId: post.userId,
+      postType: "meal_plan",
+      postId,
+    });
   }
 
   // Get updated like count
@@ -357,6 +368,14 @@ export async function addMealPlanPostComment(
         },
       },
     },
+  });
+
+  await notifyPostOwnerAboutComment({
+    actorId: userId,
+    ownerId: post.userId,
+    postType: "meal_plan",
+    postId,
+    text,
   });
 
   return comment as unknown as MealPlanPostComment;

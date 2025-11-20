@@ -3,6 +3,10 @@ import { errors } from "./api-errors";
 import { createFeedActivity } from "./feed-utils";
 import type { RecipePost, PostComment } from "./types";
 import { v4 as uuidv4 } from "uuid";
+import {
+  notifyPostOwnerAboutComment,
+  notifyPostOwnerAboutLike,
+} from "./push-notifications";
 
 /**
  * Create a recipe post
@@ -193,6 +197,13 @@ export async function toggleLike(
         userId,
       },
     });
+
+    await notifyPostOwnerAboutLike({
+      actorId: userId,
+      ownerId: post.userId,
+      postType: "recipe",
+      postId,
+    });
   }
 
   // Get updated like count
@@ -242,6 +253,14 @@ export async function addComment(
         },
       },
     },
+  });
+
+  await notifyPostOwnerAboutComment({
+    actorId: userId,
+    ownerId: post.userId,
+    postType: "recipe",
+    postId,
+    text,
   });
 
   return comment as unknown as PostComment;

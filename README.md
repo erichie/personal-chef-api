@@ -18,10 +18,12 @@ BETTER_AUTH_URL="http://localhost:3000/api/auth"
 NEXT_PUBLIC_BETTER_AUTH_URL="http://localhost:3000/api/auth"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
+EXPO_ACCESS_TOKEN="" # Optional Expo push service access token
 ```
 
 `NEXT_PUBLIC_APP_URL` is used for server-side fetches when constructing share URLs.
 `BLOB_READ_WRITE_TOKEN` powers Vercel Blob client uploads for feed and recipe posts.
+`EXPO_ACCESS_TOKEN` lets the backend send Expo push notifications using your project access token (leave blank to use the default unauthenticated client, which has lower throughput).
 
 ## Database
 
