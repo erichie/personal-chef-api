@@ -159,12 +159,13 @@ export async function getFriendsFeed(
         });
 
         if (basicPost) {
-          const isLikedByCurrentUser = basicPost.likes.some(
+          const { likes, comments, ...rest } = basicPost;
+          const isLikedByCurrentUser = likes.some(
             (like) => like.userId === userId
           );
 
           post = {
-            ...basicPost,
+            ...rest,
             text: basicPost.text ?? undefined,
             photoUrl: basicPost.photoUrl ?? undefined,
             user: basicPost.user
@@ -177,8 +178,8 @@ export async function getFriendsFeed(
                   avatarUrl: basicPost.user.avatarUrl ?? undefined,
                 }
               : undefined,
-            likeCount: basicPost.likes.length,
-            commentCount: basicPost.comments.length,
+            likeCount: likes.length,
+            commentCount: comments.length,
             isLikedByCurrentUser,
           };
         }
@@ -215,11 +216,12 @@ export async function getFriendsFeed(
 
         if (recipePost) {
           // Check if current user liked
-          const isLikedByCurrentUser = recipePost.likes.some(
+          const { likes, comments, ...rest } = recipePost;
+          const isLikedByCurrentUser = likes.some(
             (like) => like.userId === userId
           );
           post = {
-            ...recipePost,
+            ...rest,
             text: recipePost.text ?? undefined,
             photoUrl: recipePost.photoUrl ?? undefined,
             rating: recipePost.rating ?? undefined,
@@ -234,8 +236,8 @@ export async function getFriendsFeed(
                   avatarUrl: recipePost.user.avatarUrl ?? undefined,
                 }
               : undefined,
-            likeCount: recipePost.likes.length,
-            commentCount: recipePost.comments.length,
+            likeCount: likes.length,
+            commentCount: comments.length,
             isLikedByCurrentUser,
           };
         }
@@ -433,12 +435,13 @@ export async function getUserActivity(
         });
 
         if (basicPost) {
-          const isLikedByCurrentUser = basicPost.likes.some(
+          const { likes, comments, ...rest } = basicPost;
+          const isLikedByCurrentUser = likes.some(
             (like) => like.userId === currentUserId
           );
 
           post = {
-            ...basicPost,
+            ...rest,
             text: basicPost.text ?? undefined,
             photoUrl: basicPost.photoUrl ?? undefined,
             user: basicPost.user
@@ -451,8 +454,8 @@ export async function getUserActivity(
                   avatarUrl: basicPost.user.avatarUrl ?? undefined,
                 }
               : undefined,
-            likeCount: basicPost.likes.length,
-            commentCount: basicPost.comments.length,
+            likeCount: likes.length,
+            commentCount: comments.length,
             isLikedByCurrentUser,
           };
         }
@@ -488,11 +491,12 @@ export async function getUserActivity(
         });
 
         if (recipePost) {
-          const isLikedByCurrentUser = recipePost.likes.some(
+          const { likes, comments, ...rest } = recipePost;
+          const isLikedByCurrentUser = likes.some(
             (like) => like.userId === currentUserId
           );
           post = {
-            ...recipePost,
+            ...rest,
             text: recipePost.text ?? undefined,
             photoUrl: recipePost.photoUrl ?? undefined,
             rating: recipePost.rating ?? undefined,
@@ -507,8 +511,8 @@ export async function getUserActivity(
                   avatarUrl: recipePost.user.avatarUrl ?? undefined,
                 }
               : undefined,
-            likeCount: recipePost.likes.length,
-            commentCount: recipePost.comments.length,
+            likeCount: likes.length,
+            commentCount: comments.length,
             isLikedByCurrentUser,
           };
         }
