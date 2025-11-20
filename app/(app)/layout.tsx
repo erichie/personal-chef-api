@@ -15,7 +15,11 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const displayName = session.user.displayName || session.user.email || "Chef";
+  const displayName =
+    (session.user as { displayName?: string | null }).displayName ??
+    session.user.name ??
+    session.user.email ??
+    "Chef";
 
   return (
     <div className="min-h-screen bg-zinc-50">
