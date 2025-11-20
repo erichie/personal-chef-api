@@ -372,6 +372,19 @@ export interface RecipePost {
   isLikedByCurrentUser?: boolean;
 }
 
+export interface BasicPost {
+  id: string;
+  userId: string;
+  text?: string;
+  photoUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: UserBasic;
+  likeCount?: number;
+  commentCount?: number;
+  isLikedByCurrentUser?: boolean;
+}
+
 export interface RecipeBasic {
   id: string;
   title: string;
@@ -396,8 +409,14 @@ export interface PostComment {
 export interface FeedActivity {
   id: string;
   userId: string;
-  activityType: "post" | "meal_plan_post" | "recipe_saved" | "friend_added";
+  activityType:
+    | "post"
+    | "basic_post"
+    | "meal_plan_post"
+    | "recipe_saved"
+    | "friend_added";
   postId?: string;
+  basicPostId?: string;
   recipeId?: string;
   mealPlanPostId?: string;
   metadata?: {
@@ -409,7 +428,7 @@ export interface FeedActivity {
   };
   createdAt: Date;
   user: UserBasic;
-  post?: RecipePost;
+  post?: RecipePost | BasicPost;
   recipe?: RecipeBasic;
   mealPlanPost?: MealPlanPost;
 }

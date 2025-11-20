@@ -36,8 +36,11 @@ model User {
   recipes           Recipe[]
   recipePublications RecipePublication[]
   posts             RecipePost[]
+  basicPosts        BasicPost[]
   postLikes         PostLike[]
+  basicPostLikes    BasicPostLike[]
   comments          PostComment[]
+  basicPostComments BasicPostComment[]
   activities        FeedActivity[]
   mealPlans         MealPlan[]
   mealPlanPosts     MealPlanPost[]
@@ -275,6 +278,54 @@ model PostComment {
   @@index([createdAt])
 }
 
+model BasicPost {
+  id     String   @id @default(uuid())
+  userId String
+
+  text     String?
+  photoUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes    BasicPostLike[]
+  comments BasicPostComment[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model BasicPostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post BasicPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model BasicPostComment {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post BasicPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
 // Feed activities - track all friend activities
 model FeedActivity {
   id              String   @id @default(uuid())
@@ -283,6 +334,7 @@ model FeedActivity {
   
   // Polymorphic references (only one will be set)
   postId          String?
+  basicPostId     String?
   recipeId        String?
   mealPlanPostId  String?
   
@@ -295,6 +347,7 @@ model FeedActivity {
   @@index([userId])
   @@index([createdAt])
   @@index([activityType])
+  @@index([basicPostId])
 }
 
 // Track recipe usage in meal plans for variety tracking

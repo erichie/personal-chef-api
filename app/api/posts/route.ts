@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { createPost } from "@/lib/post-utils";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
+import { isAllowedBlobUrl } from "@/lib/blob-utils";
 
 const createPostSchema = z.object({
   recipeId: z.string().optional(),
@@ -33,6 +35,13 @@ export async function POST(request: NextRequest) {
     const { user } = await requireAuth(request);
     const body = await request.json();
     const data = createPostSchema.parse(body);
+
+    if (data.photoUrl && !isAllowedBlobUrl(data.photoUrl)) {
+      return NextResponse.json(
+        { error: "photoUrl must be a Vercel Blob URL" },
+        { status: 400 }
+      );
+    }
 
     // Validate that either recipeId or recipe is provided
     if (!data.recipeId && !data.recipe) {
@@ -71,9 +80,9 @@ export async function POST(request: NextRequest) {
             servings: data.recipe.servings || null,
             totalMinutes: data.recipe.totalMinutes || null,
             cuisine: data.recipe.cuisine || "Other",
-            tags: (data.recipe.tags || null) as any,
-            ingredients: data.recipe.ingredients as any,
-            steps: (data.recipe.steps || null) as any,
+            tags: (data.recipe.tags || null) as Prisma.JsonValue,
+            ingredients: data.recipe.ingredients as Prisma.JsonValue,
+            steps: (data.recipe.steps || null) as Prisma.JsonValue,
             source: data.recipe.source || "user-post",
             sourceUrl: data.recipe.sourceUrl || null,
           },

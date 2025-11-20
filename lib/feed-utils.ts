@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { errors } from "./api-errors";
 import { getFriendIds } from "./friend-utils";
-import type { FeedActivity } from "./types";
+import type { FeedActivity, MealPlan } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
 /**
@@ -9,8 +9,14 @@ import { v4 as uuidv4 } from "uuid";
  */
 export async function createFeedActivity(data: {
   userId: string;
-  activityType: "post" | "meal_plan_post" | "recipe_saved" | "friend_added";
+  activityType:
+    | "post"
+    | "basic_post"
+    | "meal_plan_post"
+    | "recipe_saved"
+    | "friend_added";
   postId?: string;
+  basicPostId?: string;
   recipeId?: string;
   mealPlanPostId?: string;
   metadata?: Record<string, unknown>;
@@ -21,9 +27,10 @@ export async function createFeedActivity(data: {
       userId: data.userId,
       activityType: data.activityType,
       postId: data.postId,
+      basicPostId: data.basicPostId,
       recipeId: data.recipeId,
       mealPlanPostId: data.mealPlanPostId,
-      metadata: (data.metadata || {}) as any,
+      metadata: (data.metadata || {}) as Record<string, unknown>,
     },
   });
 }
@@ -49,12 +56,12 @@ export async function getFriendsFeed(
   // Build activity type filter
   const activityTypeFilter =
     type === "posts"
-      ? ["post"]
+      ? ["post", "basic_post"]
       : type === "meals"
       ? ["meal_plan_post"]
       : type === "saves"
       ? ["recipe_saved"]
-      : ["post", "meal_plan_post", "recipe_saved", "friend_added"];
+      : ["post", "basic_post", "meal_plan_post", "recipe_saved", "friend_added"];
 
   // Build where clause
   const where = {
@@ -117,9 +124,50 @@ export async function getFriendsFeed(
   // Enrich activities with post, meal plan post, and recipe details
   const enrichedActivities = await Promise.all(
     results.map(async (activity) => {
-      let post = null;
+      let post: FeedActivity["post"] = undefined;
       let recipe = null;
       let mealPlanPost = null;
+      if (activity.basicPostId) {
+        const basicPost = await prisma.basicPost.findUnique({
+          where: { id: activity.basicPostId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                avatarUrl: true,
+                friendCode: true,
+                bio: true,
+              },
+            },
+            likes: {
+              select: {
+                userId: true,
+              },
+            },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        });
+
+        if (basicPost) {
+          const isLikedByCurrentUser = basicPost.likes.some(
+            (like) => like.userId === userId
+          );
+
+          post = {
+            ...basicPost,
+            likeCount: basicPost.likes.length,
+            commentCount: basicPost.comments.length,
+            isLikedByCurrentUser,
+          };
+        }
+      }
+
 
       if (activity.postId) {
         post = await prisma.recipePost.findUnique({
@@ -210,7 +258,7 @@ export async function getFriendsFeed(
             "./meal-plan-utils"
           );
           const enrichedMealPlan = await enrichMealPlanWithRecipes(
-            mealPlanPostData.mealPlan as any
+            mealPlanPostData.mealPlan as unknown as MealPlan
           );
 
           // Check if current user liked
@@ -239,6 +287,7 @@ export async function getFriendsFeed(
         userId: activity.userId,
         activityType: activity.activityType,
         postId: activity.postId,
+        basicPostId: activity.basicPostId,
         recipeId: activity.recipeId,
         mealPlanPostId: activity.mealPlanPostId,
         metadata: activity.metadata as Record<string, unknown>,
@@ -323,9 +372,50 @@ export async function getUserActivity(
   // Enrich activities
   const enrichedActivities = await Promise.all(
     results.map(async (activity) => {
-      let post = null;
+      let post: FeedActivity["post"] = undefined;
       let recipe = null;
       let mealPlanPost = null;
+      if (activity.basicPostId) {
+        const basicPost = await prisma.basicPost.findUnique({
+          where: { id: activity.basicPostId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                email: true,
+                avatarUrl: true,
+                friendCode: true,
+                bio: true,
+              },
+            },
+            likes: {
+              select: {
+                userId: true,
+              },
+            },
+            comments: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        });
+
+        if (basicPost) {
+          const isLikedByCurrentUser = basicPost.likes.some(
+            (like) => like.userId === currentUserId
+          );
+
+          post = {
+            ...basicPost,
+            likeCount: basicPost.likes.length,
+            commentCount: basicPost.comments.length,
+            isLikedByCurrentUser,
+          };
+        }
+      }
+
 
       if (activity.postId) {
         post = await prisma.recipePost.findUnique({
@@ -415,7 +505,7 @@ export async function getUserActivity(
             "./meal-plan-utils"
           );
           const enrichedMealPlan = await enrichMealPlanWithRecipes(
-            mealPlanPostData.mealPlan as any
+            mealPlanPostData.mealPlan as unknown as MealPlan
           );
 
           const isLikedByCurrentUser = mealPlanPostData.likes.some(
@@ -443,6 +533,7 @@ export async function getUserActivity(
         userId: activity.userId,
         activityType: activity.activityType,
         postId: activity.postId,
+        basicPostId: activity.basicPostId,
         recipeId: activity.recipeId,
         mealPlanPostId: activity.mealPlanPostId,
         metadata: activity.metadata as Record<string, unknown>,

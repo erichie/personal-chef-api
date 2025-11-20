@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getOpenAIClient } from "@/lib/ai-utils";
+import { getRecentlyUsedRecipes } from "@/lib/recipe-search-utils";
+import { prisma } from "@/lib/prisma";
 import {
   trackAiUsage,
   AiEndpoint,
@@ -37,8 +39,9 @@ function buildChefSystemPrompt(context?: {
   inventory?: any[];
   mealPlan?: any;
   preferences?: any;
+  recentlyCooked?: string[];
 }): string {
-  let prompt = `You are a helpful personal chef assistant. Your role is to provide cooking advice, answer questions about recipes, suggest meal ideas, and help users with their meal planning and cooking needs.
+  let prompt = `You are an enthusiastic, friendly, and highly skilled personal chef. You love food and helping people eat well! Your goal is to create personalized meal plans that feel like they were designed by a thoughtful friend who happens to be a professional chef.
 
 When helping users:
 - Be friendly, encouraging, and enthusiastic about cooking
@@ -47,7 +50,9 @@ When helping users:
 - Keep responses concise but informative
 - If they ask about specific recipes or ingredients, be specific and detailed
 - If they need substitutions, provide creative alternatives
-- Help them make the most of what they have available`;
+- Help them make the most of what they have available
+- Feel free to "riff" on ideas - suggest variations, pairings, or creative twists
+- If you're unsure what they want, ask clarifying questions to get it right`;
 
   // Add context about their current state
   if (context) {
@@ -58,7 +63,7 @@ When helping users:
         .join(", ");
       prompt += `\n\nUser's available inventory includes: ${inventoryList}${
         context.inventory.length > 20 ? ", and more" : ""
-      }.`;
+      }. Try to suggest ideas that use these items.`;
     }
 
     if (context.groceryList && context.groceryList.length > 0) {
@@ -88,6 +93,10 @@ When helping users:
       if (prefs.exclusions && prefs.exclusions.length > 0) {
         prompt += `\nUser wants to avoid: ${prefs.exclusions.join(", ")}.`;
       }
+    }
+
+    if (context.recentlyCooked && context.recentlyCooked.length > 0) {
+      prompt += `\n\nUser has recently cooked: ${context.recentlyCooked.join(", ")}. Try to suggest diverse options that don't repeat these too closely unless asked.`;
     }
   }
 
@@ -147,7 +156,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Build system prompt with context
-    const systemPrompt = buildChefSystemPrompt(payload.context);
+    let context = payload.context || {};
+    
+    // Fetch recently cooked meals for context
+    try {
+      const recentIds = await getRecentlyUsedRecipes(user.id, 14); // Last 2 weeks
+      if (recentIds.length > 0) {
+        const recentRecipes = await prisma.recipe.findMany({
+          where: { id: { in: recentIds } },
+          select: { title: true },
+          take: 10 // Limit to most recent 10 to save tokens
+        });
+        
+        context = {
+          ...context,
+          recentlyCooked: recentRecipes.map(r => r.title)
+        };
+      }
+    } catch (error) {
+      console.error("Failed to fetch recent recipes for chat context:", error);
+      // Continue without history if it fails
+    }
+
+    const systemPrompt = buildChefSystemPrompt(context);
 
     // Prepare messages for OpenAI
     const messages = [

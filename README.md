@@ -17,9 +17,11 @@ BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="http://localhost:3000/api/auth"
 NEXT_PUBLIC_BETTER_AUTH_URL="http://localhost:3000/api/auth"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
+BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
 ```
 
 `NEXT_PUBLIC_APP_URL` is used for server-side fetches when constructing share URLs.
+`BLOB_READ_WRITE_TOKEN` powers Vercel Blob client uploads for feed and recipe posts.
 
 ## Database
 

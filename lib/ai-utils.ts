@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { errors } from "./api-errors";
+import { prisma } from "./prisma";
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -23,7 +24,7 @@ export function getOpenAIClient(): OpenAI {
 }
 
 // System prompt for meal plan generation
-export const MEAL_PLAN_SYSTEM_PROMPT = `You are an expert personal chef and meal planning assistant. Your role is to create personalized, practical meal plans based on the user's preferences, dietary needs, and lifestyle.
+export const MEAL_PLAN_SYSTEM_PROMPT = `You are an enthusiastic, friendly, and highly skilled personal chef. You love food and helping people eat well! Your goal is to create personalized meal plans that feel like they were designed by a thoughtful friend who happens to be a professional chef.
 
 When creating meal plans:
 1. Consider the user's cooking skill level, time constraints, and equipment
@@ -156,6 +157,7 @@ export interface MealPlanRequest {
     quantity?: number;
     unit?: string;
   }>;
+  recentlyUsedRecipes?: string[]; // List of recipe titles to avoid repetition
   preferencesExplanation?: string;
 }
 
@@ -310,6 +312,13 @@ ${
   request.preferences.flavorPreferences &&
   request.preferences.flavorPreferences.length > 0
     ? `Flavor Preferences: ${request.preferences.flavorPreferences.join(", ")}`
+    : ""
+}
+${
+  request.recentlyUsedRecipes && request.recentlyUsedRecipes.length > 0
+    ? `\nRecently Cooked Meals (AVOID REPETITION):
+The user has recently eaten the following meals. Please do NOT include these or very similar dishes in the new meal plan:
+${request.recentlyUsedRecipes.map((title) => `- ${title}`).join("\n")}`
     : ""
 }
 
@@ -506,45 +515,39 @@ export async function generateHybridMealPlan(
   if (targetDbRecipes === 0) {
     console.log("No recipes in database, will generate all with AI");
   } else {
-    // RECIPE EXCLUSION DISABLED FOR DEVELOPMENT
-    // Uncomment this when your database is more populated (100+ recipes)
-    // to avoid repeating recently used recipes
+    // RECIPE EXCLUSION LOGIC
+    // We exclude recently used recipes to ensure variety in the meal plan
+    let recentlyUsed = await getRecentlyUsedRecipes(userId, 14);
 
-    // // Smart exclusion strategy: don't exclude more than 50% of database
-    // let recentlyUsed = await getRecentlyUsedRecipes(userId, 14);
-    //
-    // // If we're excluding too many recipes, reduce the exclusion period
-    // if (recentlyUsed.length > totalRecipes * 0.5) {
-    //   console.log(
-    //     `⚠️  Recently used (${recentlyUsed.length}) exceeds 50% of database (${totalRecipes}), trying shorter period...`
-    //   );
-    //   recentlyUsed = await getRecentlyUsedRecipes(userId, 7);
-    //
-    //   // If still too many, try last 3 days
-    //   if (recentlyUsed.length > totalRecipes * 0.5) {
-    //     console.log(
-    //       `⚠️  Still too many (${recentlyUsed.length}), trying last 3 days...`
-    //     );
-    //     recentlyUsed = await getRecentlyUsedRecipes(userId, 3);
-    //
-    //     // If STILL too many, only exclude very recent (last day)
-    //     if (recentlyUsed.length > totalRecipes * 0.5) {
-    //       console.log(
-    //         `⚠️  Still too many (${recentlyUsed.length}), using last 1 day only...`
-    //       );
-    //       recentlyUsed = await getRecentlyUsedRecipes(userId, 1);
-    //     }
-    //   }
-    // }
-    //
-    // console.log(
-    //   `Excluding ${recentlyUsed.length} recently used recipes (from last ${
-    //     recentlyUsed.length > totalRecipes * 0.5 ? "1 day" : "14 days"
-    //   })`
-    // );
+    // If we're excluding too many recipes, reduce the exclusion period
+    if (recentlyUsed.length > totalRecipes * 0.5) {
+      console.log(
+        `⚠️  Recently used activity (${recentlyUsed.length}) exceeds 50% of database (${totalRecipes}), trying shorter period...`
+      );
+      recentlyUsed = await getRecentlyUsedRecipes(userId, 7);
 
-    const recentlyUsed: string[] = []; // Empty for now
-    console.log("📝 Recipe exclusion disabled (dev mode)");
+      // If still too many, try last 3 days
+      if (recentlyUsed.length > totalRecipes * 0.5) {
+        console.log(
+          `⚠️  Still too many (${recentlyUsed.length}), trying last 3 days...`
+        );
+        recentlyUsed = await getRecentlyUsedRecipes(userId, 3);
+
+        // If STILL too many, only exclude very recent (last day)
+        if (recentlyUsed.length > totalRecipes * 0.5) {
+          console.log(
+            `⚠️  Still too many (${recentlyUsed.length}), using last 1 day only...`
+          );
+          recentlyUsed = await getRecentlyUsedRecipes(userId, 1);
+        }
+      }
+    }
+
+    console.log(
+      `Excluding ${recentlyUsed.length} recently used recipes (from last ${
+        recentlyUsed.length > totalRecipes * 0.5 ? "1 day" : "14 days"
+      })`
+    );
 
     const searchLimit = targetDbRecipes * 3; // Search more to have options
 
@@ -676,10 +679,34 @@ export async function generateHybridMealPlan(
   if (remainingNeeded > 0) {
     console.log(`\n🤖 Generating ${remainingNeeded} recipes with AI...`);
 
+    // Fetch titles of recently used recipes to pass to AI
+    let recentlyUsedTitles: string[] = [];
+    if (targetDbRecipes > 0) {
+      // We already calculated recentlyUsed IDs in the DB block, but it's scoped there.
+      // Let's re-fetch or assume we want to avoid the *DB* recipes we just selected + recent history.
+      
+      // Re-fetch recent IDs for context (simpler than passing variable out of block)
+      const recentIds = await getRecentlyUsedRecipes(userId, 7);
+      
+      if (recentIds.length > 0) {
+        const recentRecipes = await prisma.recipe.findMany({
+          where: { id: { in: recentIds } },
+          select: { title: true }
+        });
+        recentlyUsedTitles = recentRecipes.map(r => r.title);
+      }
+    }
+
+    // Also add the recipes we just selected from DB to the exclusion list
+    // so AI doesn't duplicate what we found in DB phase
+    const dbRecipeTitles = dbRecipes.map(r => r.title);
+    const allExclusions = [...new Set([...recentlyUsedTitles, ...dbRecipeTitles])];
+
     // Generate remaining recipes with AI
     const modifiedRequest = {
       ...request,
       numRecipes: remainingNeeded,
+      recentlyUsedRecipes: allExclusions,
     };
 
     const aiMealPlan = await generateMealPlan(modifiedRequest);

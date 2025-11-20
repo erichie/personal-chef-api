@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { getPostWithDetails, updatePost, deletePost } from "@/lib/post-utils";
+import { isAllowedBlobUrl } from "@/lib/blob-utils";
 
 const updatePostSchema = z.object({
   text: z.string().optional(),
@@ -37,6 +38,14 @@ export async function PUT(
     const body = await request.json();
 
     const data = updatePostSchema.parse(body);
+
+    if (data.photoUrl && !isAllowedBlobUrl(data.photoUrl)) {
+      return NextResponse.json(
+        { error: "photoUrl must be a Vercel Blob URL" },
+        { status: 400 }
+      );
+    }
+
     const post = await updatePost(postId, user.id, data);
 
     return NextResponse.json({ post });
