@@ -3,6 +3,14 @@ import { errors } from "./api-errors";
 
 const MAX_SLUG_ATTEMPTS = 25;
 
+type CookbookUser = {
+  id: string;
+  cookbookSlug: string | null;
+  displayName: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+};
+
 export function slugifyCookbookSlug(value: string) {
   return value
     .toLowerCase()
@@ -33,7 +41,10 @@ async function resolveUniqueCookbookSlug(baseSlug: string, userId?: string) {
   throw new Error("Failed to generate unique cookbook slug");
 }
 
-export async function ensureCookbookSlug(userId: string, slugInput?: string) {
+export async function ensureCookbookSlug(
+  userId: string,
+  slugInput?: string
+): Promise<CookbookUser> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -41,6 +52,8 @@ export async function ensureCookbookSlug(userId: string, slugInput?: string) {
       displayName: true,
       email: true,
       friendCode: true,
+      bio: true,
+      avatarUrl: true,
       cookbookSlug: true,
     },
   });
@@ -50,7 +63,13 @@ export async function ensureCookbookSlug(userId: string, slugInput?: string) {
   }
 
   if (!slugInput && user.cookbookSlug) {
-    return user;
+    return {
+      id: user.id,
+      cookbookSlug: user.cookbookSlug,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatarUrl: user.avatarUrl,
+    };
   }
 
   const baseValue =
@@ -166,7 +185,7 @@ export async function getPublicCookbookBySlug(slug: string) {
 }
 
 export async function getCookbookForUser(userId: string) {
-  const userRecord = await prisma.user.findUnique({
+  const userRecord: CookbookUser | null = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -181,13 +200,13 @@ export async function getCookbookForUser(userId: string) {
     throw errors.notFound("User not found");
   }
 
-  let user = userRecord;
+  let user: CookbookUser = userRecord;
 
   if (!user.cookbookSlug) {
     const ensured = await ensureCookbookSlug(userId);
     user = {
       ...user,
-      cookbookSlug: ensured.cookbookSlug ?? undefined,
+      cookbookSlug: ensured.cookbookSlug ?? user.cookbookSlug ?? null,
       displayName: ensured.displayName ?? user.displayName,
       bio: ensured.bio ?? user.bio,
       avatarUrl: ensured.avatarUrl ?? user.avatarUrl,

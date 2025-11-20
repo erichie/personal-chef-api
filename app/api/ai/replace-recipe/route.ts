@@ -7,6 +7,7 @@ import {
   type ReplaceRecipeRequest,
 } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { generateRecipeEmbedding } from "@/lib/embedding-utils";
 import {
@@ -115,9 +116,21 @@ export async function POST(request: NextRequest) {
           servings: replacementRecipeData.servings || null,
           totalMinutes: replacementRecipeData.totalMinutes || null,
           cuisine: replacementRecipeData.cuisine || "Other",
-          tags: replacementRecipeData.tags || null,
-          ingredients: replacementRecipeData.ingredients || [],
-          steps: replacementRecipeData.steps || null,
+          tags:
+            replacementRecipeData.tags !== undefined &&
+            replacementRecipeData.tags !== null
+              ? (replacementRecipeData.tags as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+          ingredients:
+            replacementRecipeData.ingredients !== undefined &&
+            replacementRecipeData.ingredients !== null
+              ? (replacementRecipeData.ingredients as Prisma.InputJsonValue)
+              : ([] as Prisma.InputJsonValue),
+          steps:
+            replacementRecipeData.steps !== undefined &&
+            replacementRecipeData.steps !== null
+              ? (replacementRecipeData.steps as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
           source: "generated",
           embeddingVersion: embedding ? 1 : null,
         },

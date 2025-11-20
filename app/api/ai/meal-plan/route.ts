@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { generateHybridMealPlan, type MealPlanRequest } from "@/lib/ai-utils";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { generateRecipeEmbedding } from "@/lib/embedding-utils";
 import { recordRecipeUsage } from "@/lib/recipe-search-utils";
@@ -140,9 +141,13 @@ export async function POST(request: NextRequest) {
     if (mealPlanData.days && Array.isArray(mealPlanData.days)) {
       for (const day of mealPlanData.days) {
         if (day.meals) {
-          const mealTypes = ["breakfast", "lunch", "dinner"];
+          const mealTypes = ["breakfast", "lunch", "dinner"] as const;
+          const mealsRecord = day.meals as Record<
+            (typeof mealTypes)[number],
+            typeof day.meals.dinner
+          >;
           for (const mealType of mealTypes) {
-            const meal = day.meals[mealType];
+            const meal = mealsRecord[mealType];
             if (meal && meal.title) {
               let recipeId: string;
 
@@ -199,9 +204,19 @@ export async function POST(request: NextRequest) {
                       servings: meal.servings || null,
                       totalMinutes: meal.totalMinutes || null,
                       cuisine: meal.cuisine || "Other",
-                      tags: meal.tags || null,
-                      ingredients: meal.ingredients || [],
-                      steps: meal.steps || null,
+                      tags:
+                        meal.tags !== undefined && meal.tags !== null
+                          ? (meal.tags as Prisma.InputJsonValue)
+                          : Prisma.JsonNull,
+                      ingredients:
+                        meal.ingredients !== undefined &&
+                        meal.ingredients !== null
+                          ? (meal.ingredients as Prisma.InputJsonValue)
+                          : ([] as Prisma.InputJsonValue),
+                      steps:
+                        meal.steps !== undefined && meal.steps !== null
+                          ? (meal.steps as Prisma.InputJsonValue)
+                          : Prisma.JsonNull,
                       source: "ai",
                       embeddingVersion: embedding ? 1 : null,
                     },
@@ -227,7 +242,7 @@ export async function POST(request: NextRequest) {
 
               // Store the mapping and inject recipeId into the meal
               recipeIdMap.set(meal.title, recipeId);
-              meal.recipeId = recipeId;
+              (meal as { recipeId?: string }).recipeId = recipeId;
             }
           }
         }

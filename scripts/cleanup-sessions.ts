@@ -11,7 +11,7 @@ async function cleanupDuplicateSessions() {
 
   // Get all users
   const users = await prisma.user.findMany({
-    select: { id: true, email: true, deviceId: true },
+    select: { id: true, email: true },
   });
 
   let totalDeleted = 0;
@@ -24,7 +24,7 @@ async function cleanupDuplicateSessions() {
     });
 
     if (sessions.length > 1) {
-      const userLabel = user.email || user.deviceId;
+      const userLabel = user.email || user.id;
       console.log(`User ${userLabel}: Found ${sessions.length} sessions`);
 
       // Keep the most recent valid session, delete the rest

@@ -49,11 +49,7 @@ export async function POST(request: NextRequest) {
     const token = await generateClientTokenFromReadWriteToken({
       pathname,
       maximumSizeInBytes: MAX_FILE_SIZE_BYTES,
-      allowedContentTypes: ALLOWED_CONTENT_TYPES,
-      tokenPayload: JSON.stringify({
-        userId: user.id,
-        filename,
-      }),
+      allowedContentTypes: Array.from(ALLOWED_CONTENT_TYPES),
     });
 
     return NextResponse.json({

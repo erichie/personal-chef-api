@@ -3,6 +3,7 @@ import { errors } from "./api-errors";
 import { getFriendIds } from "./friend-utils";
 import type { FeedActivity, MealPlan } from "./types";
 import { v4 as uuidv4 } from "uuid";
+import { Prisma } from "@prisma/client";
 
 /**
  * Create a feed activity
@@ -30,7 +31,10 @@ export async function createFeedActivity(data: {
       basicPostId: data.basicPostId,
       recipeId: data.recipeId,
       mealPlanPostId: data.mealPlanPostId,
-      metadata: (data.metadata || {}) as Record<string, unknown>,
+      metadata:
+        data.metadata !== undefined && data.metadata !== null
+          ? (data.metadata as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
     },
   });
 }
@@ -161,6 +165,18 @@ export async function getFriendsFeed(
 
           post = {
             ...basicPost,
+            text: basicPost.text ?? undefined,
+            photoUrl: basicPost.photoUrl ?? undefined,
+            user: basicPost.user
+              ? {
+                  ...basicPost.user,
+                  displayName: basicPost.user.displayName ?? undefined,
+                  email: basicPost.user.email ?? undefined,
+                  friendCode: basicPost.user.friendCode ?? undefined,
+                  bio: basicPost.user.bio ?? undefined,
+                  avatarUrl: basicPost.user.avatarUrl ?? undefined,
+                }
+              : undefined,
             likeCount: basicPost.likes.length,
             commentCount: basicPost.comments.length,
             isLikedByCurrentUser,
@@ -170,7 +186,7 @@ export async function getFriendsFeed(
 
 
       if (activity.postId) {
-        post = await prisma.recipePost.findUnique({
+        const recipePost = await prisma.recipePost.findUnique({
           where: { id: activity.postId },
           include: {
             user: {
@@ -197,15 +213,29 @@ export async function getFriendsFeed(
           },
         });
 
-        if (post) {
+        if (recipePost) {
           // Check if current user liked
-          const isLikedByCurrentUser = post.likes.some(
+          const isLikedByCurrentUser = recipePost.likes.some(
             (like) => like.userId === userId
           );
           post = {
-            ...post,
-            likeCount: post.likes.length,
-            commentCount: post.comments.length,
+            ...recipePost,
+            text: recipePost.text ?? undefined,
+            photoUrl: recipePost.photoUrl ?? undefined,
+            rating: recipePost.rating ?? undefined,
+            review: recipePost.review ?? undefined,
+            user: recipePost.user
+              ? {
+                  ...recipePost.user,
+                  displayName: recipePost.user.displayName ?? undefined,
+                  email: recipePost.user.email ?? undefined,
+                  friendCode: recipePost.user.friendCode ?? undefined,
+                  bio: recipePost.user.bio ?? undefined,
+                  avatarUrl: recipePost.user.avatarUrl ?? undefined,
+                }
+              : undefined,
+            likeCount: recipePost.likes.length,
+            commentCount: recipePost.comments.length,
             isLikedByCurrentUser,
           };
         }
@@ -409,6 +439,18 @@ export async function getUserActivity(
 
           post = {
             ...basicPost,
+            text: basicPost.text ?? undefined,
+            photoUrl: basicPost.photoUrl ?? undefined,
+            user: basicPost.user
+              ? {
+                  ...basicPost.user,
+                  displayName: basicPost.user.displayName ?? undefined,
+                  email: basicPost.user.email ?? undefined,
+                  friendCode: basicPost.user.friendCode ?? undefined,
+                  bio: basicPost.user.bio ?? undefined,
+                  avatarUrl: basicPost.user.avatarUrl ?? undefined,
+                }
+              : undefined,
             likeCount: basicPost.likes.length,
             commentCount: basicPost.comments.length,
             isLikedByCurrentUser,
@@ -418,7 +460,7 @@ export async function getUserActivity(
 
 
       if (activity.postId) {
-        post = await prisma.recipePost.findUnique({
+        const recipePost = await prisma.recipePost.findUnique({
           where: { id: activity.postId },
           include: {
             user: {
@@ -445,14 +487,28 @@ export async function getUserActivity(
           },
         });
 
-        if (post) {
-          const isLikedByCurrentUser = post.likes.some(
+        if (recipePost) {
+          const isLikedByCurrentUser = recipePost.likes.some(
             (like) => like.userId === currentUserId
           );
           post = {
-            ...post,
-            likeCount: post.likes.length,
-            commentCount: post.comments.length,
+            ...recipePost,
+            text: recipePost.text ?? undefined,
+            photoUrl: recipePost.photoUrl ?? undefined,
+            rating: recipePost.rating ?? undefined,
+            review: recipePost.review ?? undefined,
+            user: recipePost.user
+              ? {
+                  ...recipePost.user,
+                  displayName: recipePost.user.displayName ?? undefined,
+                  email: recipePost.user.email ?? undefined,
+                  friendCode: recipePost.user.friendCode ?? undefined,
+                  bio: recipePost.user.bio ?? undefined,
+                  avatarUrl: recipePost.user.avatarUrl ?? undefined,
+                }
+              : undefined,
+            likeCount: recipePost.likes.length,
+            commentCount: recipePost.comments.length,
             isLikedByCurrentUser,
           };
         }

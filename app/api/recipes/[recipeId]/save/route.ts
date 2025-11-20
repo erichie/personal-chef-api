@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError, errors } from "@/lib/api-errors";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { publishRecipe } from "@/lib/recipe-publication";
 
 const saveSchema = z.object({
@@ -36,9 +37,15 @@ export async function POST(
         servings: recipe.servings,
         totalMinutes: recipe.totalMinutes,
         cuisine: recipe.cuisine,
-        tags: recipe.tags,
-        ingredients: recipe.ingredients,
-        steps: recipe.steps,
+        tags:
+          recipe.tags !== undefined && recipe.tags !== null
+            ? (recipe.tags as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        ingredients: recipe.ingredients as Prisma.InputJsonValue,
+        steps:
+          recipe.steps !== undefined && recipe.steps !== null
+            ? (recipe.steps as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         source: "discover-import",
         sourceUrl: recipe.sourceUrl,
       },

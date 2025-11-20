@@ -6,6 +6,12 @@ import { RecipeForm } from "@/components/recipes/create-recipe-form";
 import type { IngredientJSON, StepJSON } from "@/lib/types";
 import type { Prisma } from "@prisma/client";
 
+function castJsonArray<T>(
+  value: Prisma.JsonValue | null | undefined
+): T[] {
+  return Array.isArray(value) ? (value as unknown as T[]) : [];
+}
+
 export default async function EditRecipePage({
   params,
 }: {
@@ -58,10 +64,12 @@ export default async function EditRecipePage({
           initialData={{
             title: recipe.title,
             description: recipe.description,
-            ingredients:
-              (recipe.ingredients as Prisma.JsonValue as IngredientJSON[]) ?? [],
-            steps:
-              (recipe.steps as Prisma.JsonValue as StepJSON[]) ?? [],
+            ingredients: castJsonArray<IngredientJSON>(
+              recipe.ingredients as Prisma.JsonValue
+            ),
+            steps: castJsonArray<StepJSON>(
+              recipe.steps as Prisma.JsonValue
+            ),
           }}
         />
       </div>

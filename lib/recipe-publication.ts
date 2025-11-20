@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { errors } from "./api-errors";
 import { getRecipeVoteStatsWithUserVote } from "./recipe-utils";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const MAX_SLUG_ATTEMPTS = 25;
 
@@ -53,7 +53,7 @@ export async function publishRecipe({
   shareImageUrl?: string;
   seoTitle?: string;
   seoDescription?: string;
-  metadata?: Prisma.JsonValue;
+  metadata?: Prisma.InputJsonValue;
 }) {
   const recipe = await prisma.recipe.findUnique({
     where: { id: recipeId },
@@ -88,7 +88,7 @@ export async function publishRecipe({
       shareImageUrl: shareImageUrl ?? null,
       seoTitle: seoTitle ?? null,
       seoDescription: seoDescription ?? null,
-      metadata: metadata ?? null,
+      metadata: metadata ?? Prisma.JsonNull,
       isPublished: true,
       publishedAt: now,
     },
@@ -98,7 +98,7 @@ export async function publishRecipe({
       shareImageUrl: shareImageUrl ?? null,
       seoTitle: seoTitle ?? null,
       seoDescription: seoDescription ?? null,
-      metadata: metadata ?? null,
+      metadata: metadata ?? Prisma.JsonNull,
       isPublished: true,
       publishedAt: existingPublication?.publishedAt ?? now,
       updatedAt: now,

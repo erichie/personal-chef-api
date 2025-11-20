@@ -186,6 +186,7 @@ export interface ReplaceRecipeRequest {
       level: string;
     }>;
   };
+  tokensToUse?: number;
 }
 
 // Helper to call OpenAI for meal plan generation

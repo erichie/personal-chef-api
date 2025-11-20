@@ -41,7 +41,7 @@ export default async function PublicCookbookPage({
   }
 
   const { sections, ungrouped } = formatCookbookSections(
-    data.sections,
+    data.sections as Parameters<typeof formatCookbookSections>[0],
     data.publications
   );
 

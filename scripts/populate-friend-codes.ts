@@ -47,7 +47,7 @@ async function populateFriendCodes() {
 
     if (attempts === maxAttempts) {
       console.error(
-        `❌ Failed to generate unique code for ${user.email || user.deviceId}`
+        `❌ Failed to generate unique code for ${user.email || user.id}`
       );
       continue;
     }
@@ -57,7 +57,7 @@ async function populateFriendCodes() {
       data: { friendCode: friendCode! },
     });
 
-    const userLabel = user.email || user.deviceId;
+    const userLabel = user.email || user.id;
     console.log(`✓ User ${userLabel}: ${formatFriendCode(friendCode!)}`);
   }
 

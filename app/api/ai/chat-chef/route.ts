@@ -20,6 +20,7 @@ const chatChefRequestSchema = z.object({
       inventory: z.array(z.any()).optional(),
       mealPlan: z.any().optional(),
       preferences: z.any().optional(),
+      recentlyCooked: z.array(z.string()).optional(),
     })
     .optional(),
   messages: z.array(

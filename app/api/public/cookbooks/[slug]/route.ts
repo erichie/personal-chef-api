@@ -13,7 +13,7 @@ export async function GET(
     const { slug } = await params;
     const { user, sections, publications } = await getPublicCookbookBySlug(slug);
     const { sections: sectionPayload, ungrouped } = formatCookbookSections(
-      sections,
+      sections as Parameters<typeof formatCookbookSections>[0],
       publications
     );
 

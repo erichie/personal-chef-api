@@ -20,7 +20,6 @@ async function migrateFriendCodes() {
     select: {
       id: true,
       email: true,
-      deviceId: true,
       friendCode: true,
     },
   });
@@ -57,7 +56,7 @@ async function migrateFriendCodes() {
 
     if (attempts === maxAttempts) {
       console.error(
-        `❌ Failed to generate unique code for ${user.email || user.deviceId}`
+        `❌ Failed to generate unique code for ${user.email || user.id}`
       );
       continue;
     }
@@ -68,7 +67,7 @@ async function migrateFriendCodes() {
       data: { friendCode: friendCode! },
     });
 
-    const userLabel = user.email || user.deviceId?.slice(0, 25);
+    const userLabel = user.email || user.id;
     console.log(`✓ ${userLabel}`);
     console.log(`  Old: ${oldCode}`);
     console.log(`  New: ${formatFriendCode(friendCode!)} (${friendCode!})\n`);

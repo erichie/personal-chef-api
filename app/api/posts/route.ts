@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { requireAuth } from "@/lib/auth-utils";
 import { handleApiError } from "@/lib/api-errors";
 import { createPost } from "@/lib/post-utils";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { isAllowedBlobUrl } from "@/lib/blob-utils";
 
@@ -80,9 +80,19 @@ export async function POST(request: NextRequest) {
             servings: data.recipe.servings || null,
             totalMinutes: data.recipe.totalMinutes || null,
             cuisine: data.recipe.cuisine || "Other",
-            tags: (data.recipe.tags || null) as Prisma.JsonValue,
-            ingredients: data.recipe.ingredients as Prisma.JsonValue,
-            steps: (data.recipe.steps || null) as Prisma.JsonValue,
+            tags:
+              data.recipe.tags !== undefined && data.recipe.tags !== null
+                ? (data.recipe.tags as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+            ingredients:
+              data.recipe.ingredients !== undefined &&
+              data.recipe.ingredients !== null
+                ? (data.recipe.ingredients as Prisma.InputJsonValue)
+                : ([] as Prisma.InputJsonValue),
+            steps:
+              data.recipe.steps !== undefined && data.recipe.steps !== null
+                ? (data.recipe.steps as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
             source: data.recipe.source || "user-post",
             sourceUrl: data.recipe.sourceUrl || null,
           },

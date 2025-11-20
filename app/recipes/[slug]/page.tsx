@@ -8,6 +8,7 @@ interface PublicRecipePayload {
     excerpt: string | null;
     isPublished: boolean;
     publishedAt: string | null;
+    seoDescription?: string | null;
   };
   recipe: {
     title: string;

@@ -197,32 +197,45 @@ function validateAndNormalize(
   // Allergies validation
   if (parsed.allergies && Array.isArray(parsed.allergies)) {
     result.allergies = parsed.allergies
-      .filter((a) => typeof a === "string" && a.trim().length > 0)
-      .map((a) => a.trim().toLowerCase())
-      .filter((a, index, self) => self.indexOf(a) === index); // Remove duplicates
+      .filter(
+        (a: unknown): a is string =>
+          typeof a === "string" && a.trim().length > 0
+      )
+      .map((a: string) => a.trim().toLowerCase())
+      .filter(
+        (a: string, index: number, self: string[]) => self.indexOf(a) === index
+      ); // Remove duplicates
   }
 
   // Dislikes validation
   if (parsed.dislikes && Array.isArray(parsed.dislikes)) {
     result.dislikes = parsed.dislikes
-      .filter((d) => typeof d === "string" && d.trim().length > 0)
-      .map((d) => d.trim().toLowerCase())
-      .filter((d, index, self) => self.indexOf(d) === index); // Remove duplicates
+      .filter(
+        (d: unknown): d is string =>
+          typeof d === "string" && d.trim().length > 0
+      )
+      .map((d: string) => d.trim().toLowerCase())
+      .filter(
+        (d: string, index: number, self: string[]) => self.indexOf(d) === index
+      ); // Remove duplicates
   }
 
   // Restrictions validation
   if (parsed.restrictions && Array.isArray(parsed.restrictions)) {
     result.restrictions = parsed.restrictions
       .filter(
-        (r) =>
-          r &&
+        (
+          r: unknown
+        ): r is { ingredient: string; reason?: string } =>
+          !!r &&
           typeof r === "object" &&
-          typeof r.ingredient === "string" &&
-          r.ingredient.trim().length > 0
+          typeof (r as { ingredient?: unknown }).ingredient === "string" &&
+          (r as { ingredient: string }).ingredient.trim().length > 0
       )
-      .map((r) => ({
+      .map((r: { ingredient: string; reason?: string }) => ({
         ingredient: r.ingredient.trim().toLowerCase(),
-        reason: r.reason && typeof r.reason === "string" ? r.reason.trim() : undefined,
+        reason:
+          r.reason && typeof r.reason === "string" ? r.reason.trim() : undefined,
       }));
   }
 

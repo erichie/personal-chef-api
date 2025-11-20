@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 
 async function checkRecipeStats() {
   console.log("\n=== Recipe Database Stats ===\n");
@@ -41,7 +42,7 @@ async function checkRecipeStats() {
   if (totalRecipes - embeddedCount > 0) {
     console.log("Sample recipes WITHOUT embeddings:");
     const samples = await prisma.recipe.findMany({
-      where: { embedding: null },
+      where: { embedding: null } as Prisma.RecipeWhereInput,
       select: { title: true, tags: true, source: true },
       take: 5,
     });
